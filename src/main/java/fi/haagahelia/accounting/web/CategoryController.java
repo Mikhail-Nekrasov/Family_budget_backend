@@ -3,6 +3,7 @@ package fi.haagahelia.accounting.web;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
@@ -45,16 +47,15 @@ public class CategoryController {
 
 
         List<Category> categories;
+
         if (type != null) {
-            categories = categoryRepository.findByTypeAndUser(type, currentUser)
-                .stream()
-                .filter(c -> c.isGlobal() || c.getUser().equals(currentUser))
-                .toList();
+            categories = categoryRepository
+                .findByTypeAndUserOrTypeAndUserIsNull(
+                    type, currentUser, type
+                );
         } else {
-            categories = categoryRepository.findByUser(currentUser)
-                .stream()
-                .filter(c -> c.isGlobal() || c.getUser().equals(currentUser))
-                .toList();
+            categories = categoryRepository
+                .findByUserOrUserIsNull(currentUser);
         }
 
         String currentUrl = request.getRequestURI() + 
@@ -123,7 +124,7 @@ public class CategoryController {
             return "redirect:" + returnUrl;
         }
 
-    @GetMapping("/deletecategory/{id}")
+    @PostMapping("/deletecategory/{id}")
     public String deleteCategory(@PathVariable("id") Long id,
                                 @RequestParam(value = "type", required = false) EntryType type,
                                 Authentication auth) {
@@ -138,9 +139,23 @@ public class CategoryController {
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid category Id:" + id));
 
-        if (!category.isGlobal() && !category.getUser().equals(currentUser)) {
-            throw new IllegalArgumentException("You cannot delete another user's category");
+        // Only the owner can delete a personal category
+        if (category.isGlobal()
+                || !currentUser.getId().equals(category.getUser().getId())) {
+            throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "You cannot delete this category"
+            );
         }
+
+        // Prevent deleting a category that is used by entries
+        if (category.getEntries() != null
+                && !category.getEntries().isEmpty()) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Move entries to another category before deleting this category"
+            );
+        }        
 
         categoryRepository.deleteById(id);
 

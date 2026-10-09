@@ -9,18 +9,22 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.model.Account;
+import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
@@ -116,8 +120,9 @@ public class EntryController {
         return "entries";
     }
     
+    @Transactional
     @PreAuthorize("@entrySecurity.isOwner(#id, authentication)")
-    @RequestMapping("/deleteentry/{id}")
+    @PostMapping("/deleteentry/{id}")
     public String deleteEntry(@PathVariable("id") Long id,
                               @RequestParam(value = "type", required = false) EntryType type,
                               Authentication auth) {
@@ -153,6 +158,7 @@ public class EntryController {
         return "redirect:/entries";
     }
 
+    @Transactional
     @PreAuthorize("@entrySecurity.isOwner(#id, authentication)")
     @GetMapping("/editentry/{id}")
     public String editEntry(@PathVariable("id") Long id,
@@ -179,7 +185,15 @@ public class EntryController {
         }
         
         model.addAttribute("entry", entry);
-        model.addAttribute("categories", categoryRepository.findByType(entry.getType()));
+        
+        // Show personal and global categories of the entry's type
+        model.addAttribute(
+            "categories",
+            categoryRepository.findByTypeAndUserOrTypeAndUserIsNull(
+                entry.getType(), currentUser, entry.getType()
+            )
+        );
+
         model.addAttribute("accounts", accountRepository.findByUser(currentUser));
         model.addAttribute("type", entry.getType());
 
@@ -191,6 +205,7 @@ public class EntryController {
         return "editentry";
     }
 
+    @Transactional
     @PreAuthorize("@entrySecurity.isOwner(#id, authentication)")
     @PostMapping("/editentry/{id}")
     public String saveEditedEntry(@PathVariable("id") Long id,
@@ -207,26 +222,49 @@ public class EntryController {
         Entry existingEntry = entryRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Invalid entry Id:" + id));
 
-
+        validateEntryReferences(entryFromForm, currentUser);
 
         // Added for new logic (amount is the Account property)    
-        Account account = existingEntry.getAccount();
-        BigDecimal currentAmount = account.getAmount() != null ? account.getAmount() : BigDecimal.ZERO;
+        // Reverse the original entry on the old account - NEW
+        Account oldAccount = existingEntry.getAccount();
+        BigDecimal oldBalance = oldAccount.getAmount() != null
+                ? oldAccount.getAmount()
+                : BigDecimal.ZERO;
 
         if (existingEntry.getType() == EntryType.INCOME) {
-            currentAmount = currentAmount.subtract(existingEntry.getAmount());
+            oldBalance = oldBalance.subtract(existingEntry.getAmount());
         } else if (existingEntry.getType() == EntryType.EXPENSE) {
-            currentAmount = currentAmount.add(existingEntry.getAmount());
+            oldBalance = oldBalance.add(existingEntry.getAmount());
         }
+
+        // Apply the edited entry to the selected account
+        Account selectedAccount = entryFromForm.getAccount();
+
+        boolean sameAccount = oldAccount.getAccount_id()
+                .equals(selectedAccount.getAccount_id());
+
+        // Use one object when the account has not changed
+        Account newAccount = sameAccount ? oldAccount : selectedAccount;
+
+        BigDecimal newBalance = sameAccount
+                ? oldBalance
+                : (newAccount.getAmount() != null
+                        ? newAccount.getAmount()
+                        : BigDecimal.ZERO);
 
         if (entryFromForm.getType() == EntryType.INCOME) {
-            currentAmount = currentAmount.add(entryFromForm.getAmount());
+            newBalance = newBalance.add(entryFromForm.getAmount());
         } else if (entryFromForm.getType() == EntryType.EXPENSE) {
-            currentAmount = currentAmount.subtract(entryFromForm.getAmount());
+            newBalance = newBalance.subtract(entryFromForm.getAmount());
         }
 
-        account.setAmount(currentAmount);
-        accountRepository.save(account);
+        if (!sameAccount) {
+            oldAccount.setAmount(oldBalance);
+            accountRepository.save(oldAccount);
+        }
+
+        newAccount.setAmount(newBalance);
+        accountRepository.save(newAccount);
 
         existingEntry.setTitle(entryFromForm.getTitle());
         existingEntry.setAmount(entryFromForm.getAmount());
@@ -234,7 +272,7 @@ public class EntryController {
         existingEntry.setDateTime(entryFromForm.getDateTime());
         existingEntry.setDescription(entryFromForm.getDescription());
         existingEntry.setCategory(entryFromForm.getCategory());
-        existingEntry.setAccount(entryFromForm.getAccount());
+        existingEntry.setAccount(newAccount);
 
         entryRepository.save(existingEntry);
 
@@ -266,7 +304,17 @@ public class EntryController {
         }
 
         model.addAttribute("entry", entry);
-        model.addAttribute("categories", type != null ? categoryRepository.findByType(type) : categoryRepository.findAll());
+
+        // Show personal and global categories only
+        model.addAttribute(
+            "categories",
+            type != null
+                ? categoryRepository.findByTypeAndUserOrTypeAndUserIsNull(
+                    type, currentUser, type
+                )
+                : categoryRepository.findByUserOrUserIsNull(currentUser)
+        );
+
         model.addAttribute("accounts", accountRepository.findByUser(currentUser));
         model.addAttribute("type", type);
 
@@ -287,6 +335,7 @@ public class EntryController {
             throw new IllegalArgumentException("User not found");
         }
         
+        validateEntryReferences(entry, currentUser);
         entry.setUser(currentUser);
 
         // Added for new logic (amount is the Account property)  
@@ -309,6 +358,42 @@ public class EntryController {
             return "redirect:/entries?type=" + type;
         }
         return "redirect:/entries";
+    }
+
+    private void validateEntryReferences(Entry entry, User currentUser) {
+        
+        // Require a positive amount for both incomes and expenses
+            if (entry.getAmount() == null
+                    || entry.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Amount must be greater than zero"
+                );
+            }
+
+        if (entry.getAccount() == null || entry.getAccount().getAccount_id() == null
+                || entry.getCategory() == null || entry.getCategory().getCategory_id() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Account and category are required");
+        }
+
+        // Reload from the database: ownership supplied by the client is not trusted.
+        Account account = accountRepository.findById(entry.getAccount().getAccount_id())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Account not found"));
+        Category category = categoryRepository.findById(entry.getCategory().getCategory_id())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category not found"));
+
+        if (account.getUser() == null || !currentUser.getId().equals(account.getUser().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account access denied");
+        }
+        if (!category.isGlobal() && !currentUser.getId().equals(category.getUser().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Category access denied");
+        }
+        if (entry.getType() == null || category.getType() != entry.getType()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category type does not match entry type");
+        }
+
+        entry.setAccount(account);
+        entry.setCategory(category);
     }
 
     public String saveNewEntrySession(@ModelAttribute Entry entry,

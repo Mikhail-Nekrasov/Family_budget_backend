@@ -1,22 +1,27 @@
 package fi.haagahelia.accounting.web;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.ui.Model;
+import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.model.Category;
+import fi.haagahelia.accounting.model.Entry;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.CategoryRepository;
@@ -110,5 +115,67 @@ public class CategoryControllerTest {
         assertEquals("redirect:" + returnUrl, result);
         assertEquals("test_user", category.getUser().getUsername());
         verify(categoryRepository, times(1)).save(category);
+    }
+
+    @Test
+    public void rejectsDeletingGlobalCategory() {
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setUsername("test_user");
+
+        Category globalCategory = new Category(
+            "Groceries",
+            EntryType.EXPENSE,
+            null
+        );
+
+        when(auth.getName()).thenReturn("test_user");
+        when(userRepository.findByUsername("test_user"))
+            .thenReturn(currentUser);
+        when(categoryRepository.findById(10L))
+            .thenReturn(Optional.of(globalCategory));
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> categoryController.deleteCategory(
+                10L, EntryType.EXPENSE, auth
+            )
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        verify(categoryRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    public void rejectsDeletingCategoryWithEntries() {
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setUsername("test_user");
+
+        Category category = new Category(
+            "Personal category",
+            EntryType.EXPENSE,
+            currentUser
+        );
+
+        Entry entry = new Entry();
+        entry.setCategory(category);
+        category.setEntries(List.of(entry));
+
+        when(auth.getName()).thenReturn("test_user");
+        when(userRepository.findByUsername("test_user"))
+            .thenReturn(currentUser);
+        when(categoryRepository.findById(10L))
+            .thenReturn(Optional.of(category));
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> categoryController.deleteCategory(
+                10L, EntryType.EXPENSE, auth
+            )
+        );
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+        verify(categoryRepository, never()).deleteById(anyLong());
     }
 }

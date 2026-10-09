@@ -1,6 +1,10 @@
 package fi.haagahelia.accounting.web;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
@@ -16,6 +20,9 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.ui.Model;
 import org.springframework.security.core.Authentication;
 
@@ -66,23 +73,26 @@ public class EntryControllerTest {
     public void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        // Setup test user
+        // Set up test user
         testUser = new User();
+        testUser.setId(1L);
         testUser.setUsername("test_user");
 
-        // Setup test category
+        // Set up test category
         testCategory = new Category();
+        ReflectionTestUtils.setField(testCategory, "category_id", 20L);
         testCategory.setName("TestCategory");
         testCategory.setType(EntryType.INCOME);
         testCategory.setUser(testUser);
 
-        // Setup test account
+        // Set up test account
         testAccount = new Account();
+        ReflectionTestUtils.setField(testAccount, "account_id", 10L);
         testAccount.setName("TestAccount");
         testAccount.setAmount(BigDecimal.valueOf(1000));
-        testAccount.setUser(testUser);
+        testAccount.setUser(testUser);     
 
-        // Setup test entry
+        // Set up test entry
         testEntry = new Entry(
             "TestEntry",
             EntryType.INCOME,
@@ -93,6 +103,13 @@ public class EntryControllerTest {
             testAccount,
             testUser
         );
+
+        // Configure repository mocks
+        when(accountRepository.findById(10L))
+            .thenReturn(Optional.of(testAccount));
+
+        when(categoryRepository.findById(20L))
+            .thenReturn(Optional.of(testCategory));
 
         // Mock authentication
         when(auth.getName()).thenReturn("test_user");
@@ -160,5 +177,131 @@ public class EntryControllerTest {
         assertEquals("redirect:/entries?type=INCOME", redirect);
         verify(entryRepository).delete(testEntry);
         verify(accountRepository).save(testAccount);
+    }
+
+
+    @Test
+    public void rejectsForeignAccountOnCreateAndEdit() {
+        User other = new User();
+        other.setId(2L);
+        testAccount.setUser(other);
+        assertForbiddenWithoutWrites(false);
+        assertForbiddenWithoutWrites(true);
+    }
+
+    @Test
+    public void rejectsForeignCategoryOnCreateAndEdit() {
+        User other = new User();
+        other.setId(2L);
+        testCategory.setUser(other);
+        assertForbiddenWithoutWrites(false);
+        assertForbiddenWithoutWrites(true);
+    }
+
+    private void assertForbiddenWithoutWrites(boolean edit) {
+        BigDecimal before = testAccount.getAmount();
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            if (edit) {
+                entryController.saveEditedEntry(1L, testEntry, auth, session);
+            } else {
+                entryController.saveNewEntry(testEntry, EntryType.INCOME, auth, session);
+            }
+        });
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        assertEquals(before, testAccount.getAmount());
+        verify(accountRepository, never()).save(any());
+        verify(entryRepository, never()).save(any());
+    }
+
+    @Test
+    public void allowsGlobalCategory() {
+        testCategory.setUser(null);
+        entryController.saveNewEntry(testEntry, EntryType.INCOME, auth, session);
+        verify(entryRepository).save(testEntry);
+    }
+
+    @Test
+    public void rejectsMissingAccountBeforeWriting() {
+        testEntry.setAccount(null);
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> entryController.saveNewEntry(testEntry, EntryType.INCOME, auth, session));
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        verify(accountRepository, never()).save(any());
+        verify(entryRepository, never()).save(any());
+    }
+
+    @Test
+    public void testMoveExpenseToAnotherAccount() {
+        // The current balance already includes the original expense
+        testEntry.setType(EntryType.EXPENSE);
+        testEntry.setAmount(new BigDecimal("50.00"));
+        testCategory.setType(EntryType.EXPENSE);
+        testAccount.setAmount(new BigDecimal("950.00"));
+
+        Account secondAccount = new Account(
+            "Second account",
+            new BigDecimal("500.00"),
+            "Another account",
+            testUser
+        );
+
+        ReflectionTestUtils.setField(secondAccount, "account_id", 11L);
+
+        when(accountRepository.findById(11L))
+            .thenReturn(Optional.of(secondAccount));
+
+        Entry editedEntry = new Entry(
+            "Moved expense",
+            EntryType.EXPENSE,
+            new BigDecimal("50.00"),
+            LocalDateTime.now(),
+            "Moved to another account",
+            testCategory,
+            secondAccount,
+            testUser
+        );
+
+        entryController.saveEditedEntry(1L, editedEntry, auth, session);
+
+        assertEquals(new BigDecimal("1000.00"), testAccount.getAmount());
+        assertEquals(new BigDecimal("450.00"), secondAccount.getAmount());
+        assertSame(secondAccount, testEntry.getAccount());
+
+        verify(accountRepository).save(testAccount);
+        verify(accountRepository).save(secondAccount);
+        verify(entryRepository).save(testEntry);
+    }
+
+    @Test
+    public void rejectsInvalidAmountsOnCreateAndEdit() {
+        assertInvalidAmountRejected(null);
+        assertInvalidAmountRejected(BigDecimal.ZERO);
+        assertInvalidAmountRejected(new BigDecimal("-50.00"));
+    }
+
+    private void assertInvalidAmountRejected(BigDecimal amount) {
+        testEntry.setAmount(amount);
+        BigDecimal balanceBefore = testAccount.getAmount();
+
+        ResponseStatusException createException = assertThrows(
+            ResponseStatusException.class,
+            () -> entryController.saveNewEntry(
+                testEntry, EntryType.INCOME, auth, session
+            )
+        );
+
+        ResponseStatusException editException = assertThrows(
+            ResponseStatusException.class,
+            () -> entryController.saveEditedEntry(
+                1L, testEntry, auth, session
+            )
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, createException.getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, editException.getStatusCode());
+        assertEquals(balanceBefore, testAccount.getAmount());
+
+        verify(accountRepository, never()).save(any());
+        verify(entryRepository, never()).save(any());
     }
 }

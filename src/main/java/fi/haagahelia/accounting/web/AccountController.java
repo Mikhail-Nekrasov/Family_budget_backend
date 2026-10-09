@@ -106,7 +106,7 @@ public class AccountController {
         return "redirect:/accounts";
     }
 
-    @GetMapping("/deleteaccount/{id}")
+    @PostMapping("/deleteaccount/{id}")
     public String deleteAccount(@PathVariable("id") Long id, Authentication auth) {
         User currentUser = userRepository.findByUsername(auth.getName());
 

@@ -4,8 +4,10 @@ import java.math.BigDecimal;
 import java.util.Set;
 
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Category;
@@ -20,6 +22,7 @@ import fi.haagahelia.accounting.repository.RoleRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 
 @Component
+@Profile({"dev", "test"})
 public class DataInitializer implements CommandLineRunner{
 
     private final EntryRepository entryRepository;
@@ -44,6 +47,7 @@ public class DataInitializer implements CommandLineRunner{
     }
 
     @Override
+    @Transactional
     public void run(String... args) throws Exception {
 
         // 🚫 Skip initialization if data already exists

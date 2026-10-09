@@ -38,11 +38,15 @@
             <td th:text="${acc.amount}">0.00</td>
             <td>
                 <!-- Delete (if possible, there should not be Entries or any Transfers) -->
-                <a th:if="${acc.entries.empty} and ${acc.fromTransfers.empty} and ${acc.toTransfers.empty}"
-                   th:href="@{/deleteaccount/{id}(id=${acc.account_id})}"
-                   class="btn btn-danger btn-sm"
-                   onclick="return confirm('Are you sure you want to delete this account?');">Delete
-                </a>
+                <form th:if="${acc.entries.empty and acc.fromTransfers.empty and acc.toTransfers.empty}"
+                    th:action="@{/deleteaccount/{id}(id=${acc.account_id})}"
+                    method="post"
+                    style="display: inline;"
+                    onsubmit="return confirm('Are you sure you want to delete this account?');">
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        Delete
+                    </button>
+                </form>
                 
                 <!-- Transfer -->
                 <a th:href="@{/transfer/{toId}(toId=${acc.account_id})}"

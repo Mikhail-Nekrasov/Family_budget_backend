@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.Version;
 
 @Entity
 public class Account {
@@ -21,6 +22,9 @@ public class Account {
     private String name;
     private BigDecimal amount;
     private String description;
+
+    @Version
+    private Long version;
 
     @OneToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, mappedBy = "account")
     private List<Entry> entries;
@@ -44,6 +48,10 @@ public class Account {
         this.amount = amount;
         this.description = description;
         this.user = user;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public Long getAccount_id() {

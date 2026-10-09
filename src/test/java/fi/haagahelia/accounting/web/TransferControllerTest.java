@@ -1,6 +1,9 @@
 package fi.haagahelia.accounting.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
@@ -122,12 +125,14 @@ public class TransferControllerTest {
         Transfer t1 = new Transfer(account1, account2, new BigDecimal("100"), "Desc 1");
         Transfer t2 = new Transfer(account2, account1, new BigDecimal("50"), "Desc 2");
 
-        when(accountRepository.findByUser(user)).thenReturn(Arrays.asList(account1, account2));
-        when(transferRepository.findAll()).thenReturn(Arrays.asList(t1, t2));
+    when(transferRepository.findVisibleToUser(user))
+        .thenReturn(Arrays.asList(t1, t2));
 
         String view = transferController.listTransfers(model, auth);
 
         assertEquals("transfers", view);
         verify(model).addAttribute(eq("transfers"), anyList());
+        verify(transferRepository).findVisibleToUser(user);
+        verify(transferRepository, never()).findAll();
     }
 }
