@@ -1,7 +1,6 @@
 package fi.haagahelia.accounting.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -24,6 +23,8 @@ import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.TransferRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.TransferService;
+import fi.haagahelia.accounting.service.TransferService.TransferResult;
 
 public class TransferControllerTest {
 
@@ -42,6 +43,9 @@ public class TransferControllerTest {
     @Mock
     private Authentication auth;
 
+    @Mock
+    private TransferService transferService;
+
     @InjectMocks
     private TransferController transferController;
 
@@ -52,8 +56,9 @@ public class TransferControllerTest {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
-
+        
         user = new User();
+        user.setId(1L);
         user.setUsername("testuser");
 
         account1 = new Account("Account 1", new BigDecimal("1000"), "Description 1", user);
@@ -77,47 +82,83 @@ public class TransferControllerTest {
 
     @Test
     public void testExecuteTransferSuccess() {
-        when(accountRepository.findById(1L)).thenReturn(Optional.of(account1));
-        when(accountRepository.findById(2L)).thenReturn(Optional.of(account2));
+        BigDecimal amount = new BigDecimal("200");
 
-        String result = transferController.executeTransfer(1L, 2L, new BigDecimal("200"), "Payment", auth);
+        when(transferService.executeTransfer(
+            1L, 2L, amount, "Payment", user
+        )).thenReturn(TransferResult.SUCCESS);
+
+        String result = transferController.executeTransfer(
+            1L, 2L, amount, "Payment", auth
+        );
 
         assertEquals("redirect:/transfers", result);
-        assertEquals(new BigDecimal("800"), account1.getAmount());
-        assertEquals(new BigDecimal("700"), account2.getAmount());
 
-        verify(accountRepository).save(account1);
-        verify(accountRepository).save(account2);
-        verify(transferRepository).save(any(Transfer.class));
+        verify(transferService).executeTransfer(
+            1L, 2L, amount, "Payment", user
+        );
+        verifyNoInteractions(accountRepository, transferRepository);
     }
 
     @Test
     public void testExecuteTransferNotEnoughMoney() {
-        when(accountRepository.findById(1L)).thenReturn(Optional.of(account1));
-        when(accountRepository.findById(2L)).thenReturn(Optional.of(account2));
+        BigDecimal amount = new BigDecimal("2000");
 
-        String result = transferController.executeTransfer(1L, 2L, new BigDecimal("2000"), "Payment", auth);
+        when(transferService.executeTransfer(
+            1L, 2L, amount, "Payment", user
+        )).thenReturn(TransferResult.INSUFFICIENT_FUNDS);
+
+        String result = transferController.executeTransfer(
+            1L, 2L, amount, "Payment", auth
+        );
 
         assertEquals("redirect:/transfer/2?error=nomoney", result);
     }
 
     @Test
     public void testExecuteTransferInvalidAmount() {
-        when(accountRepository.findById(1L)).thenReturn(Optional.of(account1));
-        when(accountRepository.findById(2L)).thenReturn(Optional.of(account2));
+        BigDecimal amount = new BigDecimal("-50");
 
-        String result = transferController.executeTransfer(1L, 2L, new BigDecimal("-50"), "Payment", auth);
+        when(transferService.executeTransfer(
+            1L, 2L, amount, "Payment", user
+        )).thenReturn(TransferResult.INVALID_AMOUNT);
+
+        String result = transferController.executeTransfer(
+            1L, 2L, amount, "Payment", auth
+        );
 
         assertEquals("redirect:/transfer/2?error=invalid", result);
     }
 
     @Test
     public void testExecuteTransferSameAccounts() {
-        when(accountRepository.findById(1L)).thenReturn(Optional.of(account1));
+        BigDecimal amount = new BigDecimal("100");
 
-        String result = transferController.executeTransfer(1L, 1L, new BigDecimal("100"), "Payment", auth);
+        when(transferService.executeTransfer(
+            1L, 1L, amount, "Payment", user
+        )).thenReturn(TransferResult.SAME_ACCOUNT);
+
+        String result = transferController.executeTransfer(
+            1L, 1L, amount, "Payment", auth
+        );
 
         assertEquals("redirect:/transfer/1?error=same", result);
+    }
+
+    @Test
+    public void testExecuteTransferInvalidAccounts() {
+        BigDecimal amount = new BigDecimal("100");
+
+        when(transferService.executeTransfer(
+            1L, 2L, amount, "Payment", user
+        )).thenReturn(TransferResult.INVALID_ACCOUNTS);
+
+        String result = transferController.executeTransfer(
+            1L, 2L, amount, "Payment", auth
+        );
+
+        assertEquals("redirect:/accounts", result);
+        verifyNoInteractions(accountRepository, transferRepository);
     }
 
     @Test

@@ -37,6 +37,7 @@ import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.EntryService;
 
 public class EntryControllerTest {
 
@@ -72,6 +73,16 @@ public class EntryControllerTest {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
+
+        EntryService entryService = new EntryService(
+            entryRepository,
+            accountRepository,
+            categoryRepository
+        );
+
+        ReflectionTestUtils.setField(
+            entryController, "entryService", entryService
+        );
 
         // Set up test user
         testUser = new User();
@@ -351,6 +362,103 @@ public class EntryControllerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, createException.getStatusCode());
         assertEquals(HttpStatus.BAD_REQUEST, editException.getStatusCode());
+        assertEquals(balanceBefore, testAccount.getAmount());
+
+        verify(accountRepository, never()).save(any());
+        verify(entryRepository, never()).save(any());
+    }
+
+    @Test
+    public void rejectsEditingForeignEntryWithoutWrites() {
+        User otherUser = new User();
+        otherUser.setId(2L);
+        otherUser.setUsername("other_user");
+
+        testEntry.setUser(otherUser);
+        BigDecimal balanceBefore = testAccount.getAmount();
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> entryController.saveEditedEntry(
+                1L, testEntry, auth, session
+            )
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        assertEquals(balanceBefore, testAccount.getAmount());
+
+        verify(accountRepository, never()).save(any());
+        verify(entryRepository, never()).save(any());
+    }
+
+    @Test
+    public void deletingExpenseRestoresBalance() {
+        testEntry.setType(EntryType.EXPENSE);
+        testEntry.setAmount(new BigDecimal("50"));
+        testAccount.setAmount(new BigDecimal("950"));
+
+        String result = entryController.deleteEntry(
+            1L, EntryType.EXPENSE, auth
+        );
+
+        assertEquals("redirect:/entries?type=EXPENSE", result);
+        assertEquals(new BigDecimal("1000"), testAccount.getAmount());
+
+        verify(accountRepository).save(testAccount);
+        verify(entryRepository).delete(testEntry);
+    }
+
+    @Test
+    public void deletingIncomeReversesBalance() {
+        testEntry.setType(EntryType.INCOME);
+        testEntry.setAmount(new BigDecimal("50"));
+        testAccount.setAmount(new BigDecimal("1050"));
+
+        String result = entryController.deleteEntry(
+            1L, null, auth
+        );
+
+        assertEquals("redirect:/entries", result);
+        assertEquals(new BigDecimal("1000"), testAccount.getAmount());
+
+        verify(accountRepository).save(testAccount);
+        verify(entryRepository).delete(testEntry);
+    }
+
+    @Test
+    public void rejectsDeletingForeignEntryWithoutWrites() {
+        User otherUser = new User();
+        otherUser.setId(2L);
+        otherUser.setUsername("other_user");
+
+        testEntry.setUser(otherUser);
+        BigDecimal balanceBefore = testAccount.getAmount();
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> entryController.deleteEntry(1L, null, auth)
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        assertEquals(balanceBefore, testAccount.getAmount());
+
+        verify(accountRepository, never()).save(any());
+        verify(entryRepository, never()).delete(any(Entry.class));
+    }
+
+    @Test
+    public void rejectsEntryIdOnCreateWithoutWrites() {
+        ReflectionTestUtils.setField(testEntry, "id", 99L);
+        BigDecimal balanceBefore = testAccount.getAmount();
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> entryController.saveNewEntry(
+                testEntry, EntryType.INCOME, auth, session
+            )
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertEquals(balanceBefore, testAccount.getAmount());
 
         verify(accountRepository, never()).save(any());

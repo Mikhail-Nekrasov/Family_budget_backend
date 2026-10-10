@@ -1,5 +1,7 @@
 package fi.haagahelia.accounting.web;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -10,8 +12,10 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.ui.Model;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import fi.haagahelia.accounting.model.Account;
@@ -41,6 +45,7 @@ public class AccountControllerTest {
         ReflectionTestUtils.setField(accountController, "userRepository", userRepository);
 
         User testUser = new User();
+        testUser.setId(1L);
         testUser.setUsername("test_user");
         when(auth.getName()).thenReturn("test_user");
         when(userRepository.findByUsername("test_user")).thenReturn(testUser);
@@ -106,5 +111,46 @@ public class AccountControllerTest {
 
         assertEquals("redirect:/accounts", viewName);
         verify(accountRepository, never()).deleteById(2L);
+    }
+
+    @Test
+    public void allowsDeletingAccountWithSameOwnerId() {
+        User loadedOwner = new User();
+        loadedOwner.setId(1L);
+        loadedOwner.setUsername("test_user");
+
+        Account account = new Account(
+            "Own account", BigDecimal.ZERO, "", loadedOwner
+        );
+
+        when(accountRepository.findById(10L))
+            .thenReturn(java.util.Optional.of(account));
+
+        String result = accountController.deleteAccount(10L, auth);
+
+        assertEquals("redirect:/accounts", result);
+        verify(accountRepository).deleteById(10L);
+    }
+
+    @Test
+    public void rejectsDeletingForeignAccount() {
+        User otherUser = new User();
+        otherUser.setId(2L);
+        otherUser.setUsername("other_user");
+
+        Account account = new Account(
+            "Foreign account", BigDecimal.ZERO, "", otherUser
+        );
+
+        when(accountRepository.findById(10L))
+            .thenReturn(java.util.Optional.of(account));
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> accountController.deleteAccount(10L, auth)
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        verify(accountRepository, never()).deleteById(anyLong());
     }
 }

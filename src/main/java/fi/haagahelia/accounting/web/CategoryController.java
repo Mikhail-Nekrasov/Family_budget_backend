@@ -104,6 +104,26 @@ public class CategoryController {
             throw new IllegalArgumentException("User not found");
         }
 
+        if (category.getCategory_id() != null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "ID must not be supplied when creating a category"
+            );
+        }
+
+        if (category.getName() == null || category.getName().isBlank()) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Category name is required"
+            );
+        }
+
+        if (category.getType() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Category type is required"
+            );
+        }        
         
         category.setUser(currentUser);
         categoryRepository.save(category);

@@ -6,6 +6,7 @@ import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.TransferRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.TransferService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
@@ -31,6 +32,9 @@ public class TransferController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private TransferService transferService;
+
     @GetMapping("/transfer/{toId}")
     public String showTransferForm(@PathVariable Long toId, 
                                    Model model,
@@ -45,7 +49,9 @@ public class TransferController {
 
         Account toAccount = accountRepository.findById(toId).orElse(null);
 
-        if (toAccount == null || !toAccount.getUser().equals(currentUser)) {
+        if (toAccount == null
+                || toAccount.getUser() == null
+                || !currentUser.getId().equals(toAccount.getUser().getId())) {
             return "redirect:/accounts";
         }
 
@@ -64,52 +70,30 @@ public class TransferController {
         return "transfer";
     }
 
-    @Transactional
     @PostMapping("/transfer")
     public String executeTransfer(@RequestParam Long fromId,
-                                  @RequestParam Long toId,
-                                  @RequestParam BigDecimal amount,
-                                  @RequestParam(required = false) String description,
-                                  Authentication auth) {
+                                @RequestParam Long toId,
+                                @RequestParam BigDecimal amount,
+                                @RequestParam(required = false) String description,
+                                Authentication auth) {
 
         User currentUser = userRepository.findByUsername(auth.getName());
-        
+
         if (currentUser == null) {
             throw new IllegalArgumentException("User not found");
         }
 
-        Account from = accountRepository.findById(fromId).orElse(null);
-        Account to = accountRepository.findById(toId).orElse(null);
+        TransferService.TransferResult result = transferService.executeTransfer(
+            fromId, toId, amount, description, currentUser
+        );
 
-        if (from == null || to == null || !from.getUser().equals(currentUser) || !to.getUser().equals(currentUser)) {
-            return "redirect:/accounts";
-        }
-
-        if (fromId.equals(toId)) {
-            return "redirect:/transfer/" + toId + "?error=same";
-        }
-
-        // Checking if > 0
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            return "redirect:/transfer/" + toId + "?error=invalid";
-        }
-
-        // Checking if enough money
-        if (from.getAmount().compareTo(amount) < 0) {
-            return "redirect:/transfer/" + toId + "?error=nomoney";
-        }
-
-        // Renew balances
-        from.setAmount(from.getAmount().subtract(amount));
-        to.setAmount(to.getAmount().add(amount));
-
-        accountRepository.save(from);
-        accountRepository.save(to);
-
-        Transfer transfer = new Transfer(from, to, amount, description);
-        transferRepository.save(transfer);
-
-        return "redirect:/transfers";
+        return switch (result) {
+            case SUCCESS -> "redirect:/transfers";
+            case INVALID_ACCOUNTS -> "redirect:/accounts";
+            case SAME_ACCOUNT -> "redirect:/transfer/" + toId + "?error=same";
+            case INVALID_AMOUNT -> "redirect:/transfer/" + toId + "?error=invalid";
+            case INSUFFICIENT_FUNDS -> "redirect:/transfer/" + toId + "?error=nomoney";
+        };
     }
 
     @GetMapping("/transfers")

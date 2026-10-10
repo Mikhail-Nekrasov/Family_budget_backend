@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.ui.Model;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -106,6 +107,7 @@ public class CategoryControllerTest {
     public void testSaveCategorySetsUserAndSaves() {
         Category category = new Category();
         category.setName("Test Category");
+        category.setType(EntryType.EXPENSE);
 
         when(categoryRepository.save(any(Category.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -177,5 +179,69 @@ public class CategoryControllerTest {
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
         verify(categoryRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    public void rejectsCategoryIdOnCreateWithoutWrites() {
+        User otherUser = new User();
+        otherUser.setId(2L);
+        otherUser.setUsername("other_user");
+
+        Category category = new Category(
+            "Other user's category",
+            EntryType.EXPENSE,
+            otherUser
+        );
+
+        ReflectionTestUtils.setField(category, "category_id", 99L);
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> categoryController.saveCategory(
+                category, "/categories", null, null, null, auth
+            )
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertSame(otherUser, category.getUser());
+
+        verify(categoryRepository, never()).save(any(Category.class));
+    }
+
+    @Test
+    public void rejectsMissingOrBlankCategoryName() {
+        Category category = new Category();
+        category.setType(EntryType.EXPENSE);
+
+        for (String name : new String[] {null, "", "   "}) {
+            category.setName(name);
+
+            ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> categoryController.saveCategory(
+                    category, "/categories", null, null, null, auth
+                )
+            );
+
+            assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        }
+
+        verify(categoryRepository, never()).save(any(Category.class));
+    }
+
+    @Test
+    public void rejectsMissingCategoryType() {
+        Category category = new Category();
+        category.setName("Groceries");
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> categoryController.saveCategory(
+                category, "/categories", null, null, null, auth
+            )
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        verify(categoryRepository, never()).save(any(Category.class));
     }
 }

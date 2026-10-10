@@ -9,10 +9,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ui.Model;
@@ -21,10 +19,8 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.model.Account;
-import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
@@ -32,6 +28,7 @@ import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.EntryService;
 import jakarta.servlet.http.HttpSession;
 
 import org.springframework.web.bind.annotation.RequestParam;
@@ -56,6 +53,9 @@ public class EntryController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EntryService entryService;
 
     @GetMapping("/entries")
     public String getEntries(
@@ -124,41 +124,25 @@ public class EntryController {
         return "entries";
     }
     
-    @Transactional
     @PreAuthorize("@entrySecurity.isOwner(#id, authentication)")
     @PostMapping("/deleteentry/{id}")
-    public String deleteEntry(@PathVariable("id") Long id,
-                              @RequestParam(value = "type", required = false) EntryType type,
-                              Authentication auth) {
+    public String deleteEntry(
+            @PathVariable("id") Long id,
+            @RequestParam(value = "type", required = false) EntryType type,
+            Authentication auth) {
 
         User currentUser = userRepository.findByUsername(auth.getName());
 
         if (currentUser == null) {
             throw new IllegalArgumentException("User not found");
         }
-        
-        Entry entry = entryRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid entry Id:" + id));
 
-        // Added for new logic (amount is the Account property)          
-        Account account = entry.getAccount();
-        BigDecimal currentAmount = account.getAmount() != null ? account.getAmount() : BigDecimal.ZERO;
-
-        // If we delete an Expense, Account's amount should increase and vice versa
-        if (entry.getType() == EntryType.EXPENSE) {
-            currentAmount = currentAmount.add(entry.getAmount());
-        } else if (entry.getType() == EntryType.INCOME) {
-            currentAmount = currentAmount.subtract(entry.getAmount());
-        }
-
-        account.setAmount(currentAmount);
-        accountRepository.save(account);
-
-        entryRepository.delete(entry);
+        entryService.deleteEntry(id, currentUser);
 
         if (type != null) {
             return "redirect:/entries?type=" + type;
         }
+
         return "redirect:/entries";
     }
 
@@ -209,78 +193,24 @@ public class EntryController {
         return "editentry";
     }
 
-    @Transactional
     @PreAuthorize("@entrySecurity.isOwner(#id, authentication)")
     @PostMapping("/editentry/{id}")
     public String saveEditedEntry(@PathVariable("id") Long id,
-                                  @ModelAttribute Entry entryFromForm,
-                                  Authentication auth,
-                                  HttpSession session) {
+                                @ModelAttribute Entry entryFromForm,
+                                Authentication auth,
+                                HttpSession session) {
 
         User currentUser = userRepository.findByUsername(auth.getName());
 
         if (currentUser == null) {
             throw new IllegalArgumentException("User not found");
         }
-                
-        Entry existingEntry = entryRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Invalid entry Id:" + id));
 
-        validateEntryReferences(entryFromForm, currentUser);
+        Entry updatedEntry = entryService.updateEntry(
+            id, entryFromForm, currentUser
+        );
 
-        // Added for new logic (amount is the Account property)    
-        // Reverse the original entry on the old account - NEW
-        Account oldAccount = existingEntry.getAccount();
-        BigDecimal oldBalance = oldAccount.getAmount() != null
-                ? oldAccount.getAmount()
-                : BigDecimal.ZERO;
-
-        if (existingEntry.getType() == EntryType.INCOME) {
-            oldBalance = oldBalance.subtract(existingEntry.getAmount());
-        } else if (existingEntry.getType() == EntryType.EXPENSE) {
-            oldBalance = oldBalance.add(existingEntry.getAmount());
-        }
-
-        // Apply the edited entry to the selected account
-        Account selectedAccount = entryFromForm.getAccount();
-
-        boolean sameAccount = oldAccount.getAccount_id()
-                .equals(selectedAccount.getAccount_id());
-
-        // Use one object when the account has not changed
-        Account newAccount = sameAccount ? oldAccount : selectedAccount;
-
-        BigDecimal newBalance = sameAccount
-                ? oldBalance
-                : (newAccount.getAmount() != null
-                        ? newAccount.getAmount()
-                        : BigDecimal.ZERO);
-
-        if (entryFromForm.getType() == EntryType.INCOME) {
-            newBalance = newBalance.add(entryFromForm.getAmount());
-        } else if (entryFromForm.getType() == EntryType.EXPENSE) {
-            newBalance = newBalance.subtract(entryFromForm.getAmount());
-        }
-
-        if (!sameAccount) {
-            oldAccount.setAmount(oldBalance);
-            accountRepository.save(oldAccount);
-        }
-
-        newAccount.setAmount(newBalance);
-        accountRepository.save(newAccount);
-
-        existingEntry.setTitle(entryFromForm.getTitle());
-        existingEntry.setAmount(entryFromForm.getAmount());
-        existingEntry.setType(entryFromForm.getType());
-        existingEntry.setDateTime(entryFromForm.getDateTime());
-        existingEntry.setDescription(entryFromForm.getDescription());
-        existingEntry.setCategory(entryFromForm.getCategory());
-        existingEntry.setAccount(newAccount);
-
-        entryRepository.save(existingEntry);
-
-        return "redirect:/entries?type=" + existingEntry.getType();
+        return "redirect:/entries?type=" + updatedEntry.getType();
     }
 
     @GetMapping("/addentry")
@@ -329,90 +259,30 @@ public class EntryController {
 
     @PostMapping("/addentry")
     public String saveNewEntry(@ModelAttribute Entry entry,
-                               @RequestParam(value = "type", required = false) EntryType type,
-                               Authentication auth,
-                               HttpSession session) {
-        
+                            @RequestParam(value = "type", required = false)
+                            EntryType type,
+                            Authentication auth,
+                            HttpSession session) {
+
         User currentUser = userRepository.findByUsername(auth.getName());
-        
+
         if (currentUser == null) {
             throw new IllegalArgumentException("User not found");
         }
-        
-        validateEntryReferences(entry, currentUser);
-        entry.setUser(currentUser);
 
-        // Added for new logic (amount is the Account property)  
-        Account account = entry.getAccount();
-        BigDecimal currentAmount = account.getAmount() != null ? account.getAmount() : BigDecimal.ZERO;
+        entryService.createEntry(entry, currentUser);
 
-        if (entry.getType() == EntryType.INCOME) {
-            account.setAmount(currentAmount.add(entry.getAmount()));
-        } else if (entry.getType() == EntryType.EXPENSE) {
-            account.setAmount(currentAmount.subtract(entry.getAmount()));
-        }
+        String sessionKey = type != null
+            ? "sessionNewEntry_" + type.name()
+            : "sessionNewEntry";
 
-        accountRepository.save(account);
-        entryRepository.save(entry);
-
-        String sessionKey = type != null ? "sessionNewEntry_" + type.name() : "sessionNewEntry";
         session.removeAttribute(sessionKey);
-        
+
         if (type != null) {
             return "redirect:/entries?type=" + type;
         }
+
         return "redirect:/entries";
-    }
-
-    private void validateEntryReferences(Entry entry, User currentUser) {
-        
-        // Require a non-blank title and an operation date
-        if (entry.getTitle() == null || entry.getTitle().isBlank()) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Title is required"
-            );
-        }
-
-        if (entry.getDateTime() == null) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Date and time are required"
-            );
-        }
-
-        // Require a positive amount for both incomes and expenses
-            if (entry.getAmount() == null
-                    || entry.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Amount must be greater than zero"
-                );
-            }
-
-        if (entry.getAccount() == null || entry.getAccount().getAccount_id() == null
-                || entry.getCategory() == null || entry.getCategory().getCategory_id() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Account and category are required");
-        }
-
-        // Reload from the database: ownership supplied by the client is not trusted.
-        Account account = accountRepository.findById(entry.getAccount().getAccount_id())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Account not found"));
-        Category category = categoryRepository.findById(entry.getCategory().getCategory_id())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category not found"));
-
-        if (account.getUser() == null || !currentUser.getId().equals(account.getUser().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account access denied");
-        }
-        if (!category.isGlobal() && !currentUser.getId().equals(category.getUser().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Category access denied");
-        }
-        if (entry.getType() == null || category.getType() != entry.getType()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category type does not match entry type");
-        }
-
-        entry.setAccount(account);
-        entry.setCategory(category);
     }
 
     public String saveNewEntrySession(@ModelAttribute Entry entry,
