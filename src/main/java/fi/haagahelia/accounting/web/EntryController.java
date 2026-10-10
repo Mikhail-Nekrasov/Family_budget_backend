@@ -84,24 +84,28 @@ public class EntryController {
 
         List<Entry> entries = entryPage.getContent();
 
-        // Calculating Total
+        // Calculate totals in the database
         BigDecimal total;
+
         if (type == null) {
-            List<Entry> allEntries = entryRepository.findByUser(currentUser);
-            BigDecimal incomeSum = allEntries.stream()
-                    .filter(e -> e.getType() == EntryType.INCOME)
-                    .map(Entry::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal expenseSum = allEntries.stream()
-                    .filter(e -> e.getType() == EntryType.EXPENSE)
-                    .map(Entry::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal incomeSum = entryRepository.sumAmountByUserAndType(
+                currentUser, EntryType.INCOME
+            );
+
+            BigDecimal expenseSum = entryRepository.sumAmountByUserAndType(
+                currentUser, EntryType.EXPENSE
+            );
+
+            incomeSum = incomeSum != null ? incomeSum : BigDecimal.ZERO;
+            expenseSum = expenseSum != null ? expenseSum : BigDecimal.ZERO;
+
             total = incomeSum.subtract(expenseSum);
         } else {
-            List<Entry> allEntriesByType = entryRepository.findByUserAndType(currentUser, type);
-            total = allEntriesByType.stream()
-                    .map(Entry::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal sum = entryRepository.sumAmountByUserAndType(
+                currentUser, type
+            );
+
+            total = sum != null ? sum : BigDecimal.ZERO;
         }
 
         // Page Title
@@ -362,6 +366,21 @@ public class EntryController {
 
     private void validateEntryReferences(Entry entry, User currentUser) {
         
+        // Require a non-blank title and an operation date
+        if (entry.getTitle() == null || entry.getTitle().isBlank()) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Title is required"
+            );
+        }
+
+        if (entry.getDateTime() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Date and time are required"
+            );
+        }
+
         // Require a positive amount for both incomes and expenses
             if (entry.getAmount() == null
                     || entry.getAmount().compareTo(BigDecimal.ZERO) <= 0) {

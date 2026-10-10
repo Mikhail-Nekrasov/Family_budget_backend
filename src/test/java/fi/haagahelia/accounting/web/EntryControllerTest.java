@@ -127,11 +127,20 @@ public class EntryControllerTest {
         // Mock repository to return a page with the test entry
         Page<Entry> page = new PageImpl<>(List.of(testEntry));
         when(entryRepository.findByUser(eq(testUser), any(Pageable.class))).thenReturn(page);
+        when(entryRepository.sumAmountByUserAndType(
+                testUser, EntryType.INCOME))
+            .thenReturn(new BigDecimal("500.00"));
 
+        when(entryRepository.sumAmountByUserAndType(
+                testUser, EntryType.EXPENSE))
+            .thenReturn(new BigDecimal("150.00"));
+        
         String view = entryController.getEntries(null, 0, 5, model, auth);
         assertEquals("entries", view);
         verify(model).addAttribute(eq("entries"), anyList());
         verify(model).addAttribute(eq("pageTitle"), eq("All entries"));
+        verify(model).addAttribute("total", new BigDecimal("350.00"));
+        verify(entryRepository, never()).findByUser(testUser);
     }
 
     @Test
@@ -281,6 +290,49 @@ public class EntryControllerTest {
 
     private void assertInvalidAmountRejected(BigDecimal amount) {
         testEntry.setAmount(amount);
+        BigDecimal balanceBefore = testAccount.getAmount();
+
+        ResponseStatusException createException = assertThrows(
+            ResponseStatusException.class,
+            () -> entryController.saveNewEntry(
+                testEntry, EntryType.INCOME, auth, session
+            )
+        );
+
+        ResponseStatusException editException = assertThrows(
+            ResponseStatusException.class,
+            () -> entryController.saveEditedEntry(
+                1L, testEntry, auth, session
+            )
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, createException.getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, editException.getStatusCode());
+        assertEquals(balanceBefore, testAccount.getAmount());
+
+        verify(accountRepository, never()).save(any());
+        verify(entryRepository, never()).save(any());
+    }
+
+    @Test
+    public void rejectsMissingOrBlankTitle() {
+        testEntry.setTitle(null);
+        assertInvalidEntryRejected();
+
+        testEntry.setTitle("");
+        assertInvalidEntryRejected();
+
+        testEntry.setTitle("   ");
+        assertInvalidEntryRejected();
+    }
+
+    @Test
+    public void rejectsMissingDateTime() {
+        testEntry.setDateTime(null);
+        assertInvalidEntryRejected();
+    }
+
+    private void assertInvalidEntryRejected() {
         BigDecimal balanceBefore = testAccount.getAmount();
 
         ResponseStatusException createException = assertThrows(
