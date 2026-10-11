@@ -2,11 +2,16 @@ package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import fi.haagahelia.accounting.api.dto.EntryResponse;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
@@ -207,5 +212,43 @@ public class EntryService {
         accountRepository.save(account);
 
         entryRepository.delete(entry);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EntryResponse> getEntries(
+            User currentUser, EntryType type, int page, int size) {
+
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Page must be non-negative and size must be between 1 and 100"
+            );
+        }
+
+        Pageable pageable = PageRequest.of(
+            page,
+            size,
+            Sort.by(
+                Sort.Order.desc("dateTime"),
+                Sort.Order.desc("id")
+            )
+        );
+
+        Page<Entry> entries = type == null
+            ? entryRepository.findByUser(currentUser, pageable)
+            : entryRepository.findByUserAndType(currentUser, type, pageable);
+
+        return entries.map(entry -> new EntryResponse(
+            entry.getId(),
+            entry.getTitle(),
+            entry.getType(),
+            entry.getAmount(),
+            entry.getDateTime(),
+            entry.getDescription(),
+            entry.getAccount().getAccount_id(),
+            entry.getAccount().getName(),
+            entry.getCategory().getCategory_id(),
+            entry.getCategory().getName()
+        ));
     }
 }

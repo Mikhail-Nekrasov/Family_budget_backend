@@ -1,11 +1,15 @@
 package fi.haagahelia.accounting.service;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import fi.haagahelia.accounting.api.dto.CategoryResponse;
 import fi.haagahelia.accounting.model.Category;
+import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 
@@ -19,7 +23,7 @@ public class CategoryService {
     }
 
     @Transactional
-    public void createCategory(Category category, User currentUser) {
+    public Category createCategory(Category category, User currentUser) {
         if (category.getCategory_id() != null) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
@@ -42,7 +46,7 @@ public class CategoryService {
         }
 
         category.setUser(currentUser);
-        categoryRepository.save(category);
+        return categoryRepository.save(category);
     }
 
     @Transactional
@@ -70,5 +74,25 @@ public class CategoryService {
         }
 
         categoryRepository.deleteById(id);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CategoryResponse> getCategories(
+            User currentUser, EntryType type) {
+
+        List<Category> categories = type == null
+            ? categoryRepository.findByUserOrUserIsNull(currentUser)
+            : categoryRepository.findByTypeAndUserOrTypeAndUserIsNull(
+                type, currentUser, type
+            );
+
+        return categories.stream()
+            .map(category -> new CategoryResponse(
+                category.getCategory_id(),
+                category.getName(),
+                category.getType(),
+                category.isGlobal()
+            ))
+            .toList();
     }
 }

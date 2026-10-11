@@ -1,12 +1,14 @@
 package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import fi.haagahelia.accounting.api.dto.AccountResponse;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
@@ -21,7 +23,7 @@ public class AccountService {
     }
 
     @Transactional
-    public void createAccount(Account account, User currentUser) {
+    public Account createAccount(Account account, User currentUser) {
         if (account.getName() == null || account.getName().isBlank()) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
@@ -35,11 +37,11 @@ public class AccountService {
             account.setAmount(BigDecimal.ZERO);
         }
 
-        accountRepository.save(account);
+        return accountRepository.save(account);
     }
 
     @Transactional
-    public void deleteAccount(Long id, User currentUser) {
+    public boolean deleteAccount(Long id, User currentUser) {
         Account account = accountRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND,
@@ -63,8 +65,24 @@ public class AccountService {
             || (account.getToTransfers() != null
                 && !account.getToTransfers().isEmpty());
 
-        if (!hasEntries && !hasTransfers) {
-            accountRepository.deleteById(id);
+        if (hasEntries || hasTransfers) {
+            return false;
         }
+
+        accountRepository.deleteById(id);
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AccountResponse> getAccounts(User currentUser) {
+        return accountRepository.findByUser(currentUser)
+            .stream()
+            .map(account -> new AccountResponse(
+                account.getAccount_id(),
+                account.getName(),
+                account.getAmount(),
+                account.getDescription()
+            ))
+            .toList();
     }
 }
