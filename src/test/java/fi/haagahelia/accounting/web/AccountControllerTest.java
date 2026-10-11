@@ -21,9 +21,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Entry;
 import fi.haagahelia.accounting.model.EntryType;
+import fi.haagahelia.accounting.model.Transfer;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.AccountService;
 
 public class AccountControllerTest {
 
@@ -43,6 +45,12 @@ public class AccountControllerTest {
         accountController = new AccountController(); 
         ReflectionTestUtils.setField(accountController, "accountRepository", accountRepository);
         ReflectionTestUtils.setField(accountController, "userRepository", userRepository);
+
+        AccountService accountService = new AccountService(accountRepository);
+
+        ReflectionTestUtils.setField(
+            accountController, "accountService", accountService
+        );
 
         User testUser = new User();
         testUser.setId(1L);
@@ -151,6 +159,56 @@ public class AccountControllerTest {
         );
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        verify(accountRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    public void rejectsMissingOrBlankAccountName() {
+        Account account = new Account();
+        account.setAmount(new BigDecimal("100"));
+
+        for (String name : new String[] {
+                null, "", "   ", "\t", "\n", " \t\n "
+        }) {
+            account.setName(name);
+
+            ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> accountController.saveAccount(account, auth)
+            );
+
+            assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        }
+
+        assertEquals(new BigDecimal("100"), account.getAmount());
+        assertNull(account.getUser());
+
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    public void preventsDeletingAccountWithTransfer() {
+        User owner = userRepository.findByUsername("test_user");
+
+        Account account = new Account(
+            "Source", new BigDecimal("100"), "", owner
+        );
+        Account destination = new Account(
+            "Destination", BigDecimal.ZERO, "", owner
+        );
+
+        Transfer transfer = new Transfer(
+            account, destination, new BigDecimal("50"), "Payment"
+        );
+
+        account.setFromTransfers(List.of(transfer));
+
+        when(accountRepository.findById(10L))
+            .thenReturn(java.util.Optional.of(account));
+
+        String result = accountController.deleteAccount(10L, auth);
+
+        assertEquals("redirect:/accounts", result);
         verify(accountRepository, never()).deleteById(anyLong());
     }
 }

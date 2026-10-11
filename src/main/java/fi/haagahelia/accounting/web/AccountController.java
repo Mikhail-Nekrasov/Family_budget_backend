@@ -6,13 +6,11 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Entry;
@@ -20,6 +18,7 @@ import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.AccountService;
 
 @Controller
 public class AccountController {
@@ -29,6 +28,9 @@ public class AccountController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private AccountService accountService;
 
     @GetMapping("/accounts")
     public String accounts(@RequestParam(value = "type", required = false) String type,
@@ -91,50 +93,31 @@ public class AccountController {
     }
 
     @PostMapping("/addaccount")
-    public String saveAccount(@ModelAttribute Account account, Authentication auth) {
+    public String saveAccount(@ModelAttribute Account account,
+                            Authentication auth) {
+
         User currentUser = userRepository.findByUsername(auth.getName());
 
         if (currentUser == null) {
             throw new IllegalArgumentException("User not found");
         }
 
+        accountService.createAccount(account, currentUser);
 
-        account.setUser(currentUser);
-
-        if (account.getAmount() == null) { 
-            account.setAmount(BigDecimal.ZERO);
-        }
-        accountRepository.save(account);
         return "redirect:/accounts";
     }
 
     @PostMapping("/deleteaccount/{id}")
-    public String deleteAccount(@PathVariable("id") Long id, Authentication auth) {
+    public String deleteAccount(@PathVariable("id") Long id,
+                                Authentication auth) {
+
         User currentUser = userRepository.findByUsername(auth.getName());
 
         if (currentUser == null) {
             throw new IllegalArgumentException("User not found");
         }
 
-
-        Account account = accountRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid account Id:" + id));
-
-        if (account.getUser() == null
-                || !currentUser.getId().equals(account.getUser().getId())) {
-            throw new ResponseStatusException(
-                HttpStatus.FORBIDDEN,
-                "You cannot delete another user's account"
-            );
-        }
-
-        boolean hasEntries = account.getEntries() != null && !account.getEntries().isEmpty();
-        boolean hasTransfers = (account.getFromTransfers() != null && !account.getFromTransfers().isEmpty()) ||
-                               (account.getToTransfers() != null && !account.getToTransfers().isEmpty());
-
-        if (!hasEntries && !hasTransfers) {
-            accountRepository.deleteById(id);
-        }
+        accountService.deleteAccount(id, currentUser);
 
         return "redirect:/accounts";
     }

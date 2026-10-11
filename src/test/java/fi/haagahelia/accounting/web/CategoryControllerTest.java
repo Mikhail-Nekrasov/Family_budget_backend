@@ -27,6 +27,8 @@ import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.CategoryService;
+
 import jakarta.servlet.http.HttpServletRequest;
 
 public class CategoryControllerTest {
@@ -54,6 +56,13 @@ public class CategoryControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+
+        CategoryService categoryService =
+            new CategoryService(categoryRepository);
+
+        ReflectionTestUtils.setField(
+            categoryController, "categoryService", categoryService
+        );
 
         // Create a test user
         testUser = new User();
@@ -243,5 +252,55 @@ public class CategoryControllerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         verify(categoryRepository, never()).save(any(Category.class));
+    }
+
+    @Test
+    public void rejectsDeletingForeignCategory() {
+        testUser.setId(1L);
+
+        User otherUser = new User();
+        otherUser.setId(2L);
+        otherUser.setUsername("other_user");
+
+        Category category = new Category(
+            "Foreign category",
+            EntryType.EXPENSE,
+            otherUser
+        );
+
+        when(categoryRepository.findById(10L))
+            .thenReturn(Optional.of(category));
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> categoryController.deleteCategory(
+                10L, EntryType.EXPENSE, auth
+            )
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        verify(categoryRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    public void deletesOwnCategoryWithoutEntries() {
+        testUser.setId(1L);
+
+        Category category = new Category(
+            "Personal category",
+            EntryType.EXPENSE,
+            testUser
+        );
+        category.setEntries(List.of());
+
+        when(categoryRepository.findById(10L))
+            .thenReturn(Optional.of(category));
+
+        String result = categoryController.deleteCategory(
+            10L, EntryType.EXPENSE, auth
+        );
+
+        assertEquals("redirect:/categories?type=EXPENSE", result);
+        verify(categoryRepository).deleteById(10L);
     }
 }

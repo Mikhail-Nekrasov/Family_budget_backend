@@ -14,6 +14,7 @@ import fi.haagahelia.accounting.model.Role;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.RoleRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+
 import lombok.RequiredArgsConstructor;
 
 @Controller
