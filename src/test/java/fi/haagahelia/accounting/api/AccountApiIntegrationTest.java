@@ -145,7 +145,12 @@ class AccountApiIntegrationTest {
                     "description": "Invalid account"
                     }
                     """))
-            .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(
+                    MediaType.APPLICATION_JSON
+                ))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Account name is required"));
 
         assertEquals(0, accountRepository.findByUser(owner).size());
     }

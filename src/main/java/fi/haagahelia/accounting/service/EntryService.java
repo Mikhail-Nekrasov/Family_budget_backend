@@ -11,7 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import fi.haagahelia.accounting.api.dto.CreateEntryRequest;
 import fi.haagahelia.accounting.api.dto.EntryResponse;
+import fi.haagahelia.accounting.api.dto.EntrySummaryResponse;
+import fi.haagahelia.accounting.api.dto.UpdateEntryRequest;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
@@ -250,5 +253,125 @@ public class EntryService {
             entry.getCategory().getCategory_id(),
             entry.getCategory().getName()
         ));
+    }
+
+    @Transactional
+    public EntryResponse createEntryFromRequest(
+            CreateEntryRequest request, User currentUser) {
+
+        if (request.accountId() == null || request.categoryId() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Account and category are required"
+            );
+        }
+
+        Account account = accountRepository.findById(request.accountId())
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Account not found"
+            ));
+
+        Category category = categoryRepository.findById(request.categoryId())
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Category not found"
+            ));
+
+        Entry entry = new Entry(
+            request.title(),
+            request.type(),
+            request.amount(),
+            request.dateTime(),
+            request.description(),
+            category,
+            account,
+            currentUser
+        );
+
+        createEntry(entry, currentUser);
+
+        return new EntryResponse(
+            entry.getId(),
+            entry.getTitle(),
+            entry.getType(),
+            entry.getAmount(),
+            entry.getDateTime(),
+            entry.getDescription(),
+            entry.getAccount().getAccount_id(),
+            entry.getAccount().getName(),
+            entry.getCategory().getCategory_id(),
+            entry.getCategory().getName()
+        );
+    }
+
+    @Transactional
+    public EntryResponse updateEntryFromRequest(
+            Long id, UpdateEntryRequest request, User currentUser) {
+
+        if (request.accountId() == null || request.categoryId() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Account and category are required"
+            );
+        }
+
+        Account account = accountRepository.findById(request.accountId())
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Account not found"
+            ));
+
+        Category category = categoryRepository.findById(request.categoryId())
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Category not found"
+            ));
+
+        Entry editedEntry = new Entry(
+            request.title(),
+            request.type(),
+            request.amount(),
+            request.dateTime(),
+            request.description(),
+            category,
+            account,
+            currentUser
+        );
+
+        Entry updated = updateEntry(id, editedEntry, currentUser);
+
+        return new EntryResponse(
+            updated.getId(),
+            updated.getTitle(),
+            updated.getType(),
+            updated.getAmount(),
+            updated.getDateTime(),
+            updated.getDescription(),
+            updated.getAccount().getAccount_id(),
+            updated.getAccount().getName(),
+            updated.getCategory().getCategory_id(),
+            updated.getCategory().getName()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public EntrySummaryResponse getSummary(User currentUser) {
+        BigDecimal income = entryRepository.sumAmountByUserAndType(
+            currentUser, EntryType.INCOME
+        );
+
+        BigDecimal expense = entryRepository.sumAmountByUserAndType(
+            currentUser, EntryType.EXPENSE
+        );
+
+        income = income != null ? income : BigDecimal.ZERO;
+        expense = expense != null ? expense : BigDecimal.ZERO;
+
+        return new EntrySummaryResponse(
+            income,
+            expense,
+            income.subtract(expense)
+        );
     }
 }
