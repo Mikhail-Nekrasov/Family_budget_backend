@@ -2,7 +2,7 @@ package fi.haagahelia.accounting.web;
 
 import java.io.IOException;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -28,10 +28,10 @@ import fi.haagahelia.accounting.service.UserDetailsServiceImpl;
 public class SecurityConfig {
 
     private final UserDetailsServiceImpl userDetailsService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
 
     public SecurityConfig(UserDetailsServiceImpl userDetailsService,
-                          ObjectMapper objectMapper) {
+                          JsonMapper objectMapper) {
         this.userDetailsService = userDetailsService;
         this.objectMapper = objectMapper;
     }

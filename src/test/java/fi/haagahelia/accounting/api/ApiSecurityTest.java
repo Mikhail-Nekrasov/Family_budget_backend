@@ -12,8 +12,8 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -21,7 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.UserRepository;
@@ -41,7 +41,7 @@ class ApiSecurityTest {
     private BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper objectMapper;
 
     @Test
     void anonymousApiRequestReturnsUnauthorized() throws Exception {
@@ -63,7 +63,7 @@ class ApiSecurityTest {
         mockMvc.perform(get("/accounts")
                 .accept(MediaType.TEXT_HTML))
             .andExpect(status().isFound())
-            .andExpect(redirectedUrl("http://localhost/login"));
+            .andExpect(redirectedUrl("/login"));
     }
 
     @Test
