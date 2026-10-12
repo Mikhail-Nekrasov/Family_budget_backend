@@ -62,7 +62,11 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/api/auth/login",
+                    "/api/auth/register"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .requestCache(cache -> cache
