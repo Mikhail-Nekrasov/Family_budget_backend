@@ -16,7 +16,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.ui.Model;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Entry;
@@ -42,14 +41,12 @@ public class AccountControllerTest {
         auth = Mockito.mock(Authentication.class);
         model = Mockito.mock(Model.class);
 
-        accountController = new AccountController(); 
-        ReflectionTestUtils.setField(accountController, "accountRepository", accountRepository);
-        ReflectionTestUtils.setField(accountController, "userRepository", userRepository);
-
         AccountService accountService = new AccountService(accountRepository);
 
-        ReflectionTestUtils.setField(
-            accountController, "accountService", accountService
+        accountController = new AccountController(
+            accountRepository,
+            userRepository,
+            accountService
         );
 
         User testUser = new User();

@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Controller;
@@ -23,14 +22,17 @@ import fi.haagahelia.accounting.service.AccountService;
 @Controller
 public class AccountController {
 
-    @Autowired
-    private AccountRepository accountRepository;
+    private final AccountRepository accountRepository;
+    private final UserRepository userRepository;
+    private final AccountService accountService;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private AccountService accountService;
+    public AccountController(AccountRepository accountRepository,
+                            UserRepository userRepository,
+                            AccountService accountService) {
+        this.accountRepository = accountRepository;
+        this.userRepository = userRepository;
+        this.accountService = accountService;
+    }
 
     @GetMapping("/accounts")
     public String accounts(@RequestParam(value = "type", required = false) String type,

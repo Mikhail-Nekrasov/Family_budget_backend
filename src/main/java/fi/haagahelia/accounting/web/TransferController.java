@@ -8,7 +8,6 @@ import fi.haagahelia.accounting.repository.TransferRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.TransferService;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -22,17 +21,20 @@ import java.util.Map;
 @Controller
 public class TransferController {
 
-    @Autowired
-    private AccountRepository accountRepository;
+    private final AccountRepository accountRepository;
+    private final TransferRepository transferRepository;
+    private final UserRepository userRepository;
+    private final TransferService transferService;
 
-    @Autowired
-    private TransferRepository transferRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private TransferService transferService;
+    public TransferController(AccountRepository accountRepository,
+                            TransferRepository transferRepository,
+                            UserRepository userRepository,
+                            TransferService transferService) {
+        this.accountRepository = accountRepository;
+        this.transferRepository = transferRepository;
+        this.userRepository = userRepository;
+        this.transferService = transferService;
+    }
 
     @GetMapping("/transfer/{toId}")
     public String showTransferForm(@PathVariable Long toId, 

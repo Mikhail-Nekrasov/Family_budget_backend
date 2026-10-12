@@ -2,7 +2,6 @@ package fi.haagahelia.accounting.web;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -27,14 +26,17 @@ import jakarta.servlet.http.HttpSession;
 @Controller
 public class CategoryController {
 
-    @Autowired 
-    private CategoryRepository categoryRepository;
+    private final CategoryRepository categoryRepository;
+    private final UserRepository userRepository;
+    private final CategoryService categoryService;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private CategoryService categoryService;
+    public CategoryController(CategoryRepository categoryRepository,
+                            UserRepository userRepository,
+                            CategoryService categoryService) {
+        this.categoryRepository = categoryRepository;
+        this.userRepository = userRepository;
+        this.categoryService = categoryService;
+    }
 
     @GetMapping("/categories")
     public String getCategories(@RequestParam(value = "type", required = false) EntryType type, 

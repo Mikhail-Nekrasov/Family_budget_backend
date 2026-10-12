@@ -2,6 +2,7 @@ package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
 
+import org.springframework.data.core.TypedPropertyPath;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -232,9 +233,9 @@ public class EntryService {
             page,
             size,
             Sort.by(
-                Sort.Order.desc("dateTime"),
-                Sort.Order.desc("id")
-            )
+                TypedPropertyPath.of(Entry::getDateTime),
+                TypedPropertyPath.of(Entry::getId)
+            ).descending()
         );
 
         Page<Entry> entries = type == null

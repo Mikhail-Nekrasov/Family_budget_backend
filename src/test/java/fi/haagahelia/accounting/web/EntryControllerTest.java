@@ -14,7 +14,6 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.data.domain.Page;
@@ -62,7 +61,6 @@ public class EntryControllerTest {
     @Mock
     private HttpSession session;
 
-    @InjectMocks
     private EntryController entryController;
 
     private User testUser;
@@ -80,8 +78,12 @@ public class EntryControllerTest {
             categoryRepository
         );
 
-        ReflectionTestUtils.setField(
-            entryController, "entryService", entryService
+        entryController = new EntryController(
+            entryRepository,
+            categoryRepository,
+            accountRepository,
+            userRepository,
+            entryService
         );
 
         // Set up test user

@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.core.TypedPropertyPath;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -41,20 +41,23 @@ public class EntryController {
         return "index";
     }
 
-    @Autowired
-    private EntryRepository entryRepository;
+    private final EntryRepository entryRepository;
+    private final CategoryRepository categoryRepository;
+    private final AccountRepository accountRepository;
+    private final UserRepository userRepository;
+    private final EntryService entryService;
 
-    @Autowired
-    public CategoryRepository categoryRepository;
-
-    @Autowired
-    public AccountRepository accountRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private EntryService entryService;
+    public EntryController(EntryRepository entryRepository,
+                        CategoryRepository categoryRepository,
+                        AccountRepository accountRepository,
+                        UserRepository userRepository,
+                        EntryService entryService) {
+        this.entryRepository = entryRepository;
+        this.categoryRepository = categoryRepository;
+        this.accountRepository = accountRepository;
+        this.userRepository = userRepository;
+        this.entryService = entryService;
+    }
 
     @GetMapping("/entries")
     public String getEntries(
@@ -71,7 +74,11 @@ public class EntryController {
         }  
 
         // Sorting by date
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "dateTime"));
+        Sort sort = Sort.by(
+            TypedPropertyPath.of(Entry::getDateTime)
+        ).descending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
 
         Page<Entry> entryPage;
 

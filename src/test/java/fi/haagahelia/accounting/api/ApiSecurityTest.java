@@ -235,8 +235,8 @@ class ApiSecurityTest {
         mockMvc.perform(post("/api/auth/login")
                 .session(session)
                 .header(
-                    csrfBody.get("headerName").asText(),
-                    csrfBody.get("token").asText()
+                    csrfBody.get("headerName").asString(),
+                    csrfBody.get("token").asString()
                 )
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .param("username", "api_real_csrf_user")
@@ -255,10 +255,10 @@ class ApiSecurityTest {
         );
 
         String headerName = authenticatedCsrfBody
-            .get("headerName").asText();
+            .get("headerName").asString();
 
         String token = authenticatedCsrfBody
-            .get("token").asText();
+            .get("token").asString();
 
         // Create an account using the authenticated session and new token.
         mockMvc.perform(post("/api/accounts")
