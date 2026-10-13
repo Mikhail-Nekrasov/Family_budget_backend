@@ -75,7 +75,9 @@ public class EntryController {
 
         // Sorting by date
         Sort sort = Sort.by(
-            TypedPropertyPath.of(Entry::getDateTime)
+            TypedPropertyPath.<Entry, LocalDateTime>of(
+                entry -> entry.getDateTime()
+            )
         ).descending();
 
         Pageable pageable = PageRequest.of(page, size, sort);

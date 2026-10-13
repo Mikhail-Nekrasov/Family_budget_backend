@@ -99,7 +99,7 @@ class TransferServiceTest {
 
     @ParameterizedTest
     @NullSource
-    @ValueSource(strings = {"0", "-50"})
+    @ValueSource(strings = {"0", "-50", "25.001"})
     void rejectsInvalidAmount(String amountText) {
         mockAccounts();
 

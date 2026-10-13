@@ -20,7 +20,7 @@ import fi.haagahelia.accounting.repository.UserRepository;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class AccountOptimisticLockIntegrationTest {
+public class AccountOptimisticLockIntegrationTest {
 
     @Autowired
     private AccountRepository accountRepository;

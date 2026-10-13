@@ -1,6 +1,7 @@
 package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import org.springframework.data.core.TypedPropertyPath;
 import org.springframework.data.domain.Page;
@@ -84,14 +85,23 @@ public class EntryService {
         }
 
         // Require a positive amount for both incomes and expenses
-            if (entry.getAmount() == null
-                    || entry.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Amount must be greater than zero"
-                );
-            }
+        if (entry.getAmount() == null
+                || entry.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Amount must be greater than zero"
+            );
+        }
+        
+        // Ensure that the amount has at most two decimal places
+        if (entry.getAmount().stripTrailingZeros().scale() > 2) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Amount must have at most two decimal places"
+            );
+        }
 
+        // Ensure that the account and category are provided and exist in the database
         if (entry.getAccount() == null || entry.getAccount().getAccount_id() == null
                 || entry.getCategory() == null || entry.getCategory().getCategory_id() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Account and category are required");
@@ -233,8 +243,12 @@ public class EntryService {
             page,
             size,
             Sort.by(
-                TypedPropertyPath.of(Entry::getDateTime),
-                TypedPropertyPath.of(Entry::getId)
+                TypedPropertyPath.<Entry, LocalDateTime>of(
+                    entry -> entry.getDateTime()
+                ),
+                TypedPropertyPath.<Entry, Long>of(
+                    entry -> entry.getId()
+                )
             ).descending()
         );
 

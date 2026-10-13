@@ -110,7 +110,8 @@ public class TransferRestController {
             case INVALID_AMOUNT ->
                 throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Amount must be greater than zero"
+                    "Amount must be greater than zero "
+                        + "and have at most two decimal places"
                 );
 
             case INSUFFICIENT_FUNDS ->

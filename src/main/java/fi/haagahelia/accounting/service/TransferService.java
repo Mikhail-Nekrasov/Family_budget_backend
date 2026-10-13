@@ -57,7 +57,9 @@ public class TransferService {
             return TransferResult.SAME_ACCOUNT;
         }
 
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+        if (amount == null
+                || amount.compareTo(BigDecimal.ZERO) <= 0
+                || amount.stripTrailingZeros().scale() > 2) {
             return TransferResult.INVALID_AMOUNT;
         }
 

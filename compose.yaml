@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: family_budget
+      POSTGRES_USER: family_budget
+      POSTGRES_PASSWORD: local_dev_password
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - family_budget_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U family_budget -d family_budget"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  family_budget_pgdata:

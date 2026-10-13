@@ -12,8 +12,6 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import fi.haagahelia.accounting.model.Account;
-import fi.haagahelia.accounting.model.Entry;
-import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
@@ -51,24 +49,14 @@ public class AccountController {
 
         Map<Long, BigDecimal> accountSpent = new HashMap<>();
 
-        for (Account acc : accounts) {
-            BigDecimal spent = BigDecimal.ZERO;
-
-            if (acc.getEntries() != null) {
-                for (Entry e : acc.getEntries()) {
-                    if (e.getType() == EntryType.EXPENSE && e.getAmount() != null) {
-                        spent = spent.add(e.getAmount());
-                    }
-                }
-            }
-
-            accountSpent.put(acc.getAccount_id(), spent);
+        for (Account account : accounts) {
+            accountSpent.put(account.getAccount_id(), BigDecimal.ZERO);
         }
 
+        accountSpent.putAll(accountService.getAccountSpent(currentUser));
+
         // Total
-        BigDecimal total = accounts.stream()
-            .map(a -> a.getAmount() != null ? a.getAmount() : BigDecimal.ZERO)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal total = accountService.getTotalBalance(currentUser);
 
         model.addAttribute("accounts", accounts);
         model.addAttribute("accountSpent", accountSpent);

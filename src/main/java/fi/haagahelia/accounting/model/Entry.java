@@ -16,7 +16,7 @@ import jakarta.persistence.ManyToOne;
 @Entity
 public class Entry {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private String title;
     @Enumerated(EnumType.STRING)

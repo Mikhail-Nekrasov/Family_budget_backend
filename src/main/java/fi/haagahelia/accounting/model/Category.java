@@ -16,7 +16,7 @@ import jakarta.persistence.OneToMany;
 @Entity
 public class Category {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long category_id;
     private String name;
 

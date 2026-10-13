@@ -299,6 +299,7 @@ public class EntryControllerTest {
         assertInvalidAmountRejected(null);
         assertInvalidAmountRejected(BigDecimal.ZERO);
         assertInvalidAmountRejected(new BigDecimal("-50.00"));
+        assertInvalidAmountRejected(new BigDecimal("25.001"));
     }
 
     private void assertInvalidAmountRejected(BigDecimal amount) {

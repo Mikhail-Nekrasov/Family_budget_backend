@@ -17,7 +17,7 @@ import jakarta.persistence.Version;
 @Entity
 public class Account {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long account_id;
     private String name;
     private BigDecimal amount;

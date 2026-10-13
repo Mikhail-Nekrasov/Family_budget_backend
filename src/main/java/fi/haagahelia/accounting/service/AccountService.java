@@ -1,7 +1,9 @@
 package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -10,16 +12,21 @@ import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.AccountResponse;
 import fi.haagahelia.accounting.model.Account;
+import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
+import fi.haagahelia.accounting.repository.EntryRepository;
 
 @Service
 public class AccountService {
 
     private final AccountRepository accountRepository;
+    private final EntryRepository entryRepository;
 
-    public AccountService(AccountRepository accountRepository) {
+    public AccountService(AccountRepository accountRepository,
+                        EntryRepository entryRepository) {
         this.accountRepository = accountRepository;
+        this.entryRepository = entryRepository;
     }
 
     @Transactional
@@ -28,6 +35,14 @@ public class AccountService {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Account name is required"
+            );
+        }
+
+        if (account.getAmount() != null
+                && account.getAmount().stripTrailingZeros().scale() > 2) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Amount must have at most two decimal places"
             );
         }
 
@@ -84,5 +99,24 @@ public class AccountService {
                 account.getDescription()
             ))
             .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, BigDecimal> getAccountSpent(User currentUser) {
+        Map<Long, BigDecimal> spent = new HashMap<>();
+
+        for (var total : entryRepository.sumAmountsByAccount(
+                currentUser, EntryType.EXPENSE)) {
+            spent.put(total.getAccountId(), total.getTotal());
+        }
+
+        return spent;
+    }
+
+    @Transactional(readOnly = true)
+    public BigDecimal getTotalBalance(User currentUser) {
+        BigDecimal total = accountRepository.sumAmountByUser(currentUser);
+
+        return total != null ? total : BigDecimal.ZERO;
     }
 }

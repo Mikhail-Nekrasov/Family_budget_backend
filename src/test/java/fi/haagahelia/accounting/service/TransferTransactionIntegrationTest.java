@@ -24,7 +24,7 @@ import fi.haagahelia.accounting.repository.UserRepository;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class TransferTransactionIntegrationTest {
+public class TransferTransactionIntegrationTest {
 
     @Autowired
     private TransferService transferService;

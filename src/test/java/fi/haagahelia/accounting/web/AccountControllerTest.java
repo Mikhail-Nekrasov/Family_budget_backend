@@ -23,6 +23,7 @@ import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.Transfer;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
+import fi.haagahelia.accounting.repository.EntryRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.AccountService;
 
@@ -30,6 +31,7 @@ public class AccountControllerTest {
 
     private AccountController accountController;
     private AccountRepository accountRepository;
+    private EntryRepository entryRepository;
     private UserRepository userRepository;
     private Authentication auth;
     private Model model;
@@ -37,11 +39,14 @@ public class AccountControllerTest {
     @BeforeEach
     public void setUp() {
         accountRepository = Mockito.mock(AccountRepository.class);
+        entryRepository = Mockito.mock(EntryRepository.class);
         userRepository = Mockito.mock(UserRepository.class);
         auth = Mockito.mock(Authentication.class);
         model = Mockito.mock(Model.class);
 
-        AccountService accountService = new AccountService(accountRepository);
+        AccountService accountService = new AccountService(
+            accountRepository, entryRepository
+        );
 
         accountController = new AccountController(
             accountRepository,

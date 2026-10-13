@@ -41,6 +41,14 @@ public interface EntryRepository extends JpaRepository<Entry, Long> {
         @Param("type") EntryType type
     );
 
-    //List<Entry> findByType(EntryType type, Sort sort);
-
+    @Query("""
+        SELECT e.account.account_id AS accountId, SUM(e.amount) AS total
+        FROM Entry e
+        WHERE e.user = :user AND e.type = :type
+        GROUP BY e.account.account_id
+        """)
+    List<AccountExpenseTotal> sumAmountsByAccount(
+        @Param("user") User user,
+        @Param("type") EntryType type
+    );
 }
