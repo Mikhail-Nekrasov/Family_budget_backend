@@ -122,4 +122,76 @@ class PostgresSchemaIntegrationTest {
             )
         );
     }
+
+    @Test
+    void preventsDuplicateGroupMembership() {
+        Long groupId = jdbcTemplate.queryForObject(
+            """
+            INSERT INTO budget_group (name, owner_id, created_at)
+            VALUES ('Test group', ?, CURRENT_TIMESTAMP)
+            RETURNING id
+            """,
+            Long.class,
+            userId
+        );
+
+        jdbcTemplate.update(
+            """
+            INSERT INTO group_membership (group_id, user_id, joined_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            """,
+            groupId,
+            userId
+        );
+
+        assertThrows(
+            DataIntegrityViolationException.class,
+            () -> jdbcTemplate.update(
+                """
+                INSERT INTO group_membership (group_id, user_id, joined_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                """,
+                groupId,
+                userId
+            )
+        );
+    }
+
+    @Test
+    void preventsDuplicateAccountAccessForSameGroup() {
+        Long groupId = jdbcTemplate.queryForObject(
+            """
+            INSERT INTO budget_group (name, owner_id, created_at)
+            VALUES ('Account access group', ?, CURRENT_TIMESTAMP)
+            RETURNING id
+            """,
+            Long.class,
+            userId
+        );
+
+        jdbcTemplate.update(
+            """
+            INSERT INTO group_account_access (
+                group_id, account_id, permission, created_at
+            )
+            VALUES (?, ?, 'READ', CURRENT_TIMESTAMP)
+            """,
+            groupId,
+            accountId
+        );
+
+        assertThrows(
+            DataIntegrityViolationException.class,
+            () -> jdbcTemplate.update(
+                """
+                INSERT INTO group_account_access (
+                    group_id, account_id, permission, created_at
+                )
+                VALUES (?, ?, 'EDIT', CURRENT_TIMESTAMP)
+                """,
+                groupId,
+                accountId
+            )
+        );
+    }
 }

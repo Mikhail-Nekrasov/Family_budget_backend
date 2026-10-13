@@ -35,7 +35,9 @@ import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
+import fi.haagahelia.accounting.repository.GroupAccountAccessRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.AccountAccessService;
 import fi.haagahelia.accounting.service.EntryService;
 
 public class EntryControllerTest {
@@ -75,7 +77,10 @@ public class EntryControllerTest {
         EntryService entryService = new EntryService(
             entryRepository,
             accountRepository,
-            categoryRepository
+            categoryRepository,
+            new AccountAccessService(
+                mock(GroupAccountAccessRepository.class)
+            )
         );
 
         entryController = new EntryController(
@@ -435,6 +440,7 @@ public class EntryControllerTest {
         otherUser.setUsername("other_user");
 
         testEntry.setUser(otherUser);
+        testAccount.setUser(otherUser);
         BigDecimal balanceBefore = testAccount.getAmount();
 
         ResponseStatusException exception = assertThrows(

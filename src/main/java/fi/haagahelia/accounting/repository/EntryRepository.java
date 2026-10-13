@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Entry;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
@@ -50,5 +51,13 @@ public interface EntryRepository extends JpaRepository<Entry, Long> {
     List<AccountExpenseTotal> sumAmountsByAccount(
         @Param("user") User user,
         @Param("type") EntryType type
+    );
+
+    Page<Entry> findByAccount(Account account, Pageable pageable);
+
+    Page<Entry> findByAccountAndType(
+        Account account,
+        EntryType type,
+        Pageable pageable
     );
 }

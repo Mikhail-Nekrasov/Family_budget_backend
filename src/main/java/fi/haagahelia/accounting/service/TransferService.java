@@ -29,11 +29,14 @@ public class TransferService {
 
     private final AccountRepository accountRepository;
     private final TransferRepository transferRepository;
+    private final AccountAccessService accountAccessService;
 
     public TransferService(AccountRepository accountRepository,
-                           TransferRepository transferRepository) {
+                        TransferRepository transferRepository,
+                        AccountAccessService accountAccessService) {
         this.accountRepository = accountRepository;
         this.transferRepository = transferRepository;
+        this.accountAccessService = accountAccessService;
     }
 
     @Transactional
@@ -47,9 +50,8 @@ public class TransferService {
         Account to = accountRepository.findById(toId).orElse(null);
 
         if (from == null || to == null
-                || from.getUser() == null || to.getUser() == null
-                || !currentUser.getId().equals(from.getUser().getId())
-                || !currentUser.getId().equals(to.getUser().getId())) {
+                || !accountAccessService.canEdit(from, currentUser)
+                || !accountAccessService.canRead(to, currentUser)) {
             return TransferResult.INVALID_ACCOUNTS;
         }
 

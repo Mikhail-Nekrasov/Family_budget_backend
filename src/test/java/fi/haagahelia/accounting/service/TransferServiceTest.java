@@ -14,14 +14,15 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Transfer;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
+import fi.haagahelia.accounting.repository.GroupAccountAccessRepository;
 import fi.haagahelia.accounting.repository.TransferRepository;
 import fi.haagahelia.accounting.service.TransferService.TransferResult;
 
@@ -34,7 +35,9 @@ class TransferServiceTest {
     @Mock
     private TransferRepository transferRepository;
 
-    @InjectMocks
+    @Mock
+    private GroupAccountAccessRepository accessRepository;
+
     private TransferService transferService;
 
     private User user;
@@ -46,6 +49,11 @@ class TransferServiceTest {
         user = new User();
         user.setId(1L);
         user.setUsername("testuser");
+        transferService = new TransferService(
+            accountRepository,
+            transferRepository,
+            new AccountAccessService(accessRepository)
+        );
 
         from = new Account(
             "From", new BigDecimal("1000"), "Source account", user
@@ -53,6 +61,9 @@ class TransferServiceTest {
         to = new Account(
             "To", new BigDecimal("500"), "Destination account", user
         );
+
+        ReflectionTestUtils.setField(from, "account_id", 10L);
+        ReflectionTestUtils.setField(to, "account_id", 20L);
     }
 
     private void mockAccounts() {

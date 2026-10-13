@@ -32,13 +32,16 @@ public class EntryService {
     private final EntryRepository entryRepository;
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
+    private final AccountAccessService accountAccessService;
 
     public EntryService(EntryRepository entryRepository,
                         AccountRepository accountRepository,
-                        CategoryRepository categoryRepository) {
+                        CategoryRepository categoryRepository,
+                        AccountAccessService accountAccessService) {
         this.entryRepository = entryRepository;
         this.accountRepository = accountRepository;
         this.categoryRepository = categoryRepository;
+        this.accountAccessService = accountAccessService;
     }
 
     @Transactional
@@ -203,10 +206,10 @@ public class EntryService {
                 HttpStatus.NOT_FOUND, "Entry not found"
             ));
 
-        if (entry.getUser() == null
-                || !currentUser.getId().equals(entry.getUser().getId())) {
+        if (!accountAccessService.canEdit(entry.getAccount(), currentUser)) {
             throw new ResponseStatusException(
-                HttpStatus.FORBIDDEN, "Entry access denied"
+                HttpStatus.FORBIDDEN,
+                "Account editing access denied"
             );
         }
 
