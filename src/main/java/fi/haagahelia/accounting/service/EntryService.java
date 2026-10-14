@@ -52,7 +52,7 @@ public class EntryService {
             "ID must not be supplied when creating an entry"
         );
     }    
-        validateEntryReferences(entry, currentUser);
+        validateEntryReferences(entry, currentUser, null);
 
         Account account = entry.getAccount();
         entry.setUser(account.getUser());
@@ -70,7 +70,10 @@ public class EntryService {
         entryRepository.save(entry);
     }
 
-    private void validateEntryReferences(Entry entry, User currentUser) {
+    private void validateEntryReferences(
+        Entry entry,
+        User currentUser,
+        Category existingCategory) {
         
         // Require a non-blank title and an operation date
         if (entry.getTitle() == null || entry.getTitle().isBlank()) {
@@ -122,9 +125,20 @@ public class EntryService {
                 "Account editing access denied"
             );
         }
-        if (!category.isGlobal() && !currentUser.getId().equals(category.getUser().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Category access denied");
+
+        boolean keepingExistingCategory = existingCategory != null
+            && category.getCategory_id()
+                .equals(existingCategory.getCategory_id());
+
+        if (!keepingExistingCategory
+                && !category.isGlobal()
+                && !currentUser.getId().equals(category.getUser().getId())) {
+            throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Category access denied"
+            );
         }
+
         if (entry.getType() == null || category.getType() != entry.getType()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category type does not match entry type");
         }
@@ -148,7 +162,11 @@ public class EntryService {
             );
         }
 
-        validateEntryReferences(entryFromForm, currentUser);
+        validateEntryReferences(
+            entryFromForm,
+            currentUser,
+            existingEntry.getCategory()
+        );
 
         // Reverse the original entry on the old account
         Account oldAccount = existingEntry.getAccount();

@@ -218,9 +218,41 @@ public class EntryControllerTest {
 
     @Test
     public void rejectsForeignCategoryOnCreateAndEdit() {
+        // The saved entry originally uses the current user's category.
+        Entry existingEntry = new Entry(
+            "Existing entry",
+            EntryType.INCOME,
+            new BigDecimal("500"),
+            LocalDateTime.now(),
+            "",
+            testCategory,
+            testAccount,
+            testUser
+        );
+
+        when(entryRepository.findById(1L))
+            .thenReturn(Optional.of(existingEntry));
+
+        // The request selects a different category owned by another user.
         User other = new User();
         other.setId(2L);
-        testCategory.setUser(other);
+
+        Category foreignCategory = new Category();
+        foreignCategory.setName("Foreign category");
+        foreignCategory.setType(EntryType.INCOME);
+        foreignCategory.setUser(other);
+
+        ReflectionTestUtils.setField(
+            foreignCategory,
+            "category_id",
+            30L
+        );
+
+        when(categoryRepository.findById(30L))
+            .thenReturn(Optional.of(foreignCategory));
+
+        testEntry.setCategory(foreignCategory);
+
         assertForbiddenWithoutWrites(false);
         assertForbiddenWithoutWrites(true);
     }

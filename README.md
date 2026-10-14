@@ -114,6 +114,8 @@ After logging in through the web interface, open:
 
 Swagger UI uses the browser's existing session. For POST, PUT and DELETE requests, obtain a token from `GET /api/auth/csrf` and enter its `token` value in the `csrfToken` field of the **Authorize** dialog. The browser supplies the session cookie automatically.
 
+- [Group access and permissions](docs/group-access.md)
+
 ### Endpoints
 
 | Method | Endpoint | Purpose |
