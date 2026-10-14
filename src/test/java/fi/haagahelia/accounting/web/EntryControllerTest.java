@@ -383,6 +383,7 @@ public class EntryControllerTest {
         otherUser.setUsername("other_user");
 
         testEntry.setUser(otherUser);
+        testAccount.setUser(otherUser);
         BigDecimal balanceBefore = testAccount.getAmount();
 
         ResponseStatusException exception = assertThrows(

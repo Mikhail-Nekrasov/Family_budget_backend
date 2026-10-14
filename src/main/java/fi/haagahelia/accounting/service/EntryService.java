@@ -53,9 +53,9 @@ public class EntryService {
         );
     }    
         validateEntryReferences(entry, currentUser);
-        entry.setUser(currentUser);
 
         Account account = entry.getAccount();
+        entry.setUser(account.getUser());
         BigDecimal balance = account.getAmount() != null
             ? account.getAmount()
             : BigDecimal.ZERO;
@@ -116,8 +116,11 @@ public class EntryService {
         Category category = categoryRepository.findById(entry.getCategory().getCategory_id())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category not found"));
 
-        if (account.getUser() == null || !currentUser.getId().equals(account.getUser().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account access denied");
+        if (!accountAccessService.canEdit(account, currentUser)) {
+            throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Account editing access denied"
+            );
         }
         if (!category.isGlobal() && !currentUser.getId().equals(category.getUser().getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Category access denied");
@@ -137,10 +140,11 @@ public class EntryService {
                 HttpStatus.NOT_FOUND, "Entry not found"
             ));
 
-        if (existingEntry.getUser() == null
-                || !currentUser.getId().equals(existingEntry.getUser().getId())) {
+        if (!accountAccessService.canEdit(
+                existingEntry.getAccount(), currentUser)) {
             throw new ResponseStatusException(
-                HttpStatus.FORBIDDEN, "Entry access denied"
+                HttpStatus.FORBIDDEN,
+                "Account editing access denied"
             );
         }
 
@@ -193,6 +197,7 @@ public class EntryService {
         existingEntry.setDescription(entryFromForm.getDescription());
         existingEntry.setCategory(entryFromForm.getCategory());
         existingEntry.setAccount(newAccount);
+        existingEntry.setUser(newAccount.getUser());
 
         entryRepository.save(existingEntry);
 
