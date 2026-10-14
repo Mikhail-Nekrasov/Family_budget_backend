@@ -1,5 +1,7 @@
 # Family Budget Backend
 
+[![Backend CI](https://github.com/Mikhail-Nekrasov/Family_budget_backend/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mikhail-Nekrasov/Family_budget_backend/actions/workflows/ci.yml)
+
 Backend for a budgeting application built with Spring Boot and PostgreSQL. It provides a REST API for accounts, income, expenses, categories and transfers, together with a Thymeleaf web interface.
 
 The project is being developed as the backend for a mobile application (which is in development now).

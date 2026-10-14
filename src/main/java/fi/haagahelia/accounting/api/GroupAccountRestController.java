@@ -30,8 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/groups/{groupId}/accounts")
 @Tag(
-    name = "Group accounts",
-    description = "Accounts explicitly shared with a group"
+    name = "Group accounts"
 )
 public class GroupAccountRestController {
 
@@ -46,19 +45,7 @@ public class GroupAccountRestController {
     }
 
     @Operation(
-        summary = "Share an account or change its permission",
-        description = """
-            Only the account owner can manage sharing.
-            The owner must be a member of the group.
-
-            READ allows viewing the account and its complete entry history,
-            and receiving transfers into the account.
-
-            EDIT additionally allows creating, editing and deleting entries,
-            and withdrawing transfers from the account.
-
-            Sharing does not grant permission to delete the account.
-            """
+        summary = "Share an account or change its permission"
     )
     @PutMapping("/{accountId}")
     public GroupAccountResponse setAccess(
@@ -89,13 +76,7 @@ public class GroupAccountRestController {
     }
 
     @Operation(
-        summary = "List accounts shared with a group",
-        description = """
-            Available only to group members.
-            Returns explicitly shared accounts whose owners
-            are still members of the group.
-            Private accounts are excluded.
-            """
+        summary = "List accounts shared with a group"
     )
     @GetMapping
     public List<GroupAccountResponse> getAccounts(
@@ -108,14 +89,7 @@ public class GroupAccountRestController {
     }
 
     @Operation(
-        summary = "Stop sharing an account with a group",
-        description = """
-            Only the account owner can revoke sharing.
-            The account and its financial records are preserved.
-            Revoking an already absent sharing permission is allowed.
-
-            Access granted through other groups remains effective.
-            """
+        summary = "Stop sharing an account with a group"
     )
     @DeleteMapping("/{accountId}")
     public ResponseEntity<Void> revokeAccess(
@@ -131,18 +105,7 @@ public class GroupAccountRestController {
     }
 
     @Operation(
-        summary = "Read the entry history of a shared account",
-        description = """
-            Requires membership in this group and account sharing
-            with this group. Both READ and EDIT allow viewing entries.
-
-            Includes entries created before the account was shared.
-            Supports filtering by entry type and pagination.
-            Page starts at 0; size must be between 1 and 100.
-
-            Create, edit and delete entries through /api/entries.
-            These operations require EDIT permission on the account.
-            """
+        summary = "Read the entry history of a shared account"
     )
     @GetMapping("/{accountId}/entries")
     public PageResponse<EntryResponse> getEntries(
