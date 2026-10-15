@@ -2,6 +2,7 @@ package fi.haagahelia.accounting.web;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.data.core.TypedPropertyPath;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
+import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
@@ -182,13 +184,23 @@ public class EntryController {
         
         model.addAttribute("entry", entry);
         
-        // Show personal and global categories of the entry's type
-        model.addAttribute(
-            "categories",
-            categoryRepository.findByTypeAndUserOrTypeAndUserIsNull(
-                entry.getType(), currentUser, entry.getType()
+        List<Category> categories = new ArrayList<>(
+            categoryRepository.findByTypeAndUser(
+                entry.getType(), currentUser
             )
         );
+
+        Category existingCategory = entry.getCategory();
+
+        if (existingCategory != null
+                && categories.stream().noneMatch(category ->
+                    category.getCategory_id()
+                        .equals(existingCategory.getCategory_id())
+                )) {
+            categories.add(existingCategory);
+        }
+
+        model.addAttribute("categories", categories);
 
         model.addAttribute("accounts", accountRepository.findByUser(currentUser));
         model.addAttribute("type", entry.getType());
@@ -247,14 +259,12 @@ public class EntryController {
 
         model.addAttribute("entry", entry);
 
-        // Show personal and global categories only
+        // Show the current user's categories only
         model.addAttribute(
             "categories",
             type != null
-                ? categoryRepository.findByTypeAndUserOrTypeAndUserIsNull(
-                    type, currentUser, type
-                )
-                : categoryRepository.findByUserOrUserIsNull(currentUser)
+                ? categoryRepository.findByTypeAndUser(type, currentUser)
+                : categoryRepository.findByUser(currentUser)
         );
 
         model.addAttribute("accounts", accountRepository.findByUser(currentUser));

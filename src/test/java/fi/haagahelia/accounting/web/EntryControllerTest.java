@@ -273,10 +273,10 @@ public class EntryControllerTest {
     }
 
     @Test
-    public void allowsGlobalCategory() {
+    public void rejectsGlobalCategoryOnCreate() {
         testCategory.setUser(null);
-        entryController.saveNewEntry(testEntry, EntryType.INCOME, auth, session);
-        verify(entryRepository).save(testEntry);
+
+        assertForbiddenWithoutWrites(false);
     }
 
     @Test

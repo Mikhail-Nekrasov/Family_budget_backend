@@ -81,10 +81,8 @@ public class CategoryService {
             User currentUser, EntryType type) {
 
         List<Category> categories = type == null
-            ? categoryRepository.findByUserOrUserIsNull(currentUser)
-            : categoryRepository.findByTypeAndUserOrTypeAndUserIsNull(
-                type, currentUser, type
-            );
+            ? categoryRepository.findByUser(currentUser)
+            : categoryRepository.findByTypeAndUser(type, currentUser);
 
         return categories.stream()
             .map(category -> new CategoryResponse(

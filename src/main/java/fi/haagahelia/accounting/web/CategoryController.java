@@ -54,13 +54,11 @@ public class CategoryController {
         List<Category> categories;
 
         if (type != null) {
-            categories = categoryRepository
-                .findByTypeAndUserOrTypeAndUserIsNull(
-                    type, currentUser, type
-                );
+            categories = categoryRepository.findByTypeAndUser(
+                type, currentUser
+            );
         } else {
-            categories = categoryRepository
-                .findByUserOrUserIsNull(currentUser);
+            categories = categoryRepository.findByUser(currentUser);
         }
 
         String currentUrl = request.getRequestURI() + 

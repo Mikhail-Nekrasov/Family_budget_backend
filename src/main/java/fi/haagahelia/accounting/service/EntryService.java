@@ -44,32 +44,6 @@ public class EntryService {
         this.accountAccessService = accountAccessService;
     }
 
-    @Transactional
-    public void createEntry(Entry entry, User currentUser) {
-        if (entry.getId() != null) {
-        throw new ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "ID must not be supplied when creating an entry"
-        );
-    }    
-        validateEntryReferences(entry, currentUser, null);
-
-        Account account = entry.getAccount();
-        entry.setUser(account.getUser());
-        BigDecimal balance = account.getAmount() != null
-            ? account.getAmount()
-            : BigDecimal.ZERO;
-
-        if (entry.getType() == EntryType.INCOME) {
-            account.setAmount(balance.add(entry.getAmount()));
-        } else if (entry.getType() == EntryType.EXPENSE) {
-            account.setAmount(balance.subtract(entry.getAmount()));
-        }
-
-        accountRepository.save(account);
-        entryRepository.save(entry);
-    }
-
     private void validateEntryReferences(
         Entry entry,
         User currentUser,
@@ -131,8 +105,8 @@ public class EntryService {
                 .equals(existingCategory.getCategory_id());
 
         if (!keepingExistingCategory
-                && !category.isGlobal()
-                && !currentUser.getId().equals(category.getUser().getId())) {
+                && (category.getUser() == null
+                    || !currentUser.getId().equals(category.getUser().getId()))) {
             throw new ResponseStatusException(
                 HttpStatus.FORBIDDEN,
                 "Category access denied"
@@ -145,6 +119,32 @@ public class EntryService {
 
         entry.setAccount(account);
         entry.setCategory(category);
+    }
+
+    @Transactional
+    public void createEntry(Entry entry, User currentUser) {
+        if (entry.getId() != null) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "ID must not be supplied when creating an entry"
+        );
+    }    
+        validateEntryReferences(entry, currentUser, null);
+
+        Account account = entry.getAccount();
+        entry.setUser(account.getUser());
+        BigDecimal balance = account.getAmount() != null
+            ? account.getAmount()
+            : BigDecimal.ZERO;
+
+        if (entry.getType() == EntryType.INCOME) {
+            account.setAmount(balance.add(entry.getAmount()));
+        } else if (entry.getType() == EntryType.EXPENSE) {
+            account.setAmount(balance.subtract(entry.getAmount()));
+        }
+
+        accountRepository.save(account);
+        entryRepository.save(entry);
     }
 
     @Transactional

@@ -54,21 +54,35 @@ public class DataInitializer implements CommandLineRunner{
             return;
         }
 
+        // User
+        Role role = roleRepository.findByName("ROLE_USER");
+        if (role == null) {
+            role = new Role();
+            role.setName("ROLE_USER");
+            roleRepository.save(role);
+        }
+
+        User admin = userRepository.findByUsername("admin");
+        if (admin == null) {
+            admin = new User("admin", passwordEncoder.encode("admin"), role);
+            userRepository.save(admin);
+        }
+
         // Expense categories
-        Category groceriesCategory = new Category("Groceries", EntryType.EXPENSE, null);
-        Category rentCategory = new Category("Rent", EntryType.EXPENSE, null);
-        Category transportCategory = new Category("Transport", EntryType.EXPENSE, null);
-        Category clothesCategory = new Category("Clothes", EntryType.EXPENSE, null);
-        Category entertainmentCategory = new Category("Entertainment", EntryType.EXPENSE, null);
-        Category healthCategory = new Category("Health", EntryType.EXPENSE, null);
-        Category taxCategory = new Category("Tax", EntryType.EXPENSE, null);
-        Category homeCategory = new Category("Home", EntryType.EXPENSE, null);
-        Category mobileComAndInternetCategory = new Category("Mobile Communication and Internet", EntryType.EXPENSE, null);
-        Category bankServicesCategory = new Category("Bank Services", EntryType.EXPENSE, null);
-        Category subscriptionsAndServicesCategory = new Category("Subscriptions and Services", EntryType.EXPENSE, null);
-        Category giftsCategory = new Category("Gifts", EntryType.EXPENSE, null);
-        Category educationCategory = new Category("Education", EntryType.EXPENSE, null);
-        Category otherExpencesCategory = new Category("Other Expenses", EntryType.EXPENSE, null);
+        Category groceriesCategory = new Category("Groceries", EntryType.EXPENSE, admin);
+        Category rentCategory = new Category("Rent", EntryType.EXPENSE, admin);
+        Category transportCategory = new Category("Transport", EntryType.EXPENSE, admin);
+        Category clothesCategory = new Category("Clothes", EntryType.EXPENSE, admin);
+        Category entertainmentCategory = new Category("Entertainment", EntryType.EXPENSE, admin);
+        Category healthCategory = new Category("Health", EntryType.EXPENSE, admin);
+        Category taxCategory = new Category("Tax", EntryType.EXPENSE, admin);
+        Category homeCategory = new Category("Home", EntryType.EXPENSE, admin);
+        Category mobileComAndInternetCategory = new Category("Mobile Communication and Internet", EntryType.EXPENSE, admin);
+        Category bankServicesCategory = new Category("Bank Services", EntryType.EXPENSE, admin);
+        Category subscriptionsAndServicesCategory = new Category("Subscriptions and Services", EntryType.EXPENSE, admin);
+        Category giftsCategory = new Category("Gifts", EntryType.EXPENSE, admin);
+        Category educationCategory = new Category("Education", EntryType.EXPENSE, admin);
+        Category otherExpencesCategory = new Category("Other Expenses", EntryType.EXPENSE, admin);
 
         categoryRepository.save(groceriesCategory);
         categoryRepository.save(rentCategory);
@@ -86,11 +100,11 @@ public class DataInitializer implements CommandLineRunner{
         categoryRepository.save(otherExpencesCategory);
 
         // Income categories
-        Category salaryCategory = new Category("Salary", EntryType.INCOME, null);
-        Category interestCategory = new Category("Interest", EntryType.INCOME, null);
-        Category giftsIncomeCategory = new Category("Gifts Income", EntryType.INCOME, null);
-        Category rentIncomCategory = new Category("Rent Income", EntryType.INCOME, null);
-        Category otherIncomeCategory = new Category("Other Income", EntryType.INCOME, null);
+        Category salaryCategory = new Category("Salary", EntryType.INCOME, admin);
+        Category interestCategory = new Category("Interest", EntryType.INCOME, admin);
+        Category giftsIncomeCategory = new Category("Gifts Income", EntryType.INCOME, admin);
+        Category rentIncomCategory = new Category("Rent Income", EntryType.INCOME, admin);
+        Category otherIncomeCategory = new Category("Other Income", EntryType.INCOME, admin);
 
         categoryRepository.save(salaryCategory);
         categoryRepository.save(interestCategory);
@@ -98,19 +112,7 @@ public class DataInitializer implements CommandLineRunner{
         categoryRepository.save(rentIncomCategory);
         categoryRepository.save(otherIncomeCategory);
 
-        // User
-        Role role = roleRepository.findByName("ROLE_USER");
-        if (role == null) {
-            role = new Role();
-            role.setName("ROLE_USER");
-            roleRepository.save(role);
-        }
 
-        User admin = userRepository.findByUsername("admin");
-        if (admin == null) {
-            admin = new User("admin", passwordEncoder.encode("admin"), role);
-            userRepository.save(admin);
-        }
 
         // Accounts
         Account cashAccount = new Account("Cash", BigDecimal.ZERO, "Physical cash on hand", admin);

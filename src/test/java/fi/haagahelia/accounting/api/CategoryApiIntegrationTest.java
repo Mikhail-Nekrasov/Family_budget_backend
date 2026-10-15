@@ -43,7 +43,7 @@ class CategoryApiIntegrationTest {
     private CategoryRepository categoryRepository;
 
     @Test
-    void returnsOwnAndGlobalCategoriesButNotForeignOnes() throws Exception {
+    void returnsOnlyOwnCategories() throws Exception {
         User owner = createUser("api_category_owner");
         User other = createUser("api_category_other");
 
@@ -65,7 +65,9 @@ class CategoryApiIntegrationTest {
                 .accept(MediaType.APPLICATION_JSON))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[*].name", hasItem("API own expense")))
-            .andExpect(jsonPath("$[*].name", hasItem("API global expense")))
+            .andExpect(jsonPath(
+                "$[*].name", not(hasItem("API global expense"))
+            ))
             .andExpect(jsonPath("$[*].name", hasItem("API own income")))
             .andExpect(jsonPath(
                 "$[*].name", not(hasItem("API foreign expense"))
@@ -77,7 +79,9 @@ class CategoryApiIntegrationTest {
                 .accept(MediaType.APPLICATION_JSON))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[*].name", hasItem("API own expense")))
-            .andExpect(jsonPath("$[*].name", hasItem("API global expense")))
+            .andExpect(jsonPath(
+                "$[*].name", not(hasItem("API global expense"))
+            ))
             .andExpect(jsonPath(
                 "$[*].name", not(hasItem("API foreign expense"))
             ))

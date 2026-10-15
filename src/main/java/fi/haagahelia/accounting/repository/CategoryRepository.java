@@ -15,12 +15,4 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     List<Category> findByUser(User user);
     List<Category> findByTypeAndUser(EntryType type, User user);
 
-    List<Category> findByUserOrUserIsNull(User user);
-
-    List<Category> findByTypeAndUserOrTypeAndUserIsNull(
-            EntryType personalType,
-            User user,
-            EntryType globalType
-    );
-
 }

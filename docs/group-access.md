@@ -47,12 +47,19 @@ and financial summaries, regardless of who created it.
 
 When an entry moves to another account, it belongs to the new account owner.
 
+Each newly registered user receives a personal set of default categories.
+Unused personal categories can be deleted.
+
 When creating an entry or selecting a different category, users can
-choose their own categories or global categories.
+choose only their own categories.
 
 When editing an entry, users can keep its existing category even if
-that category belongs to another user. This does not grant access
-to that user's other categories.
+it belongs to another user or is a legacy global category.
+This does not grant permission to select other categories
+owned by that user.
+
+A category used by an entry cannot be deleted until those entries
+are moved to another category or deleted.
 
 ## Revoking access
 
