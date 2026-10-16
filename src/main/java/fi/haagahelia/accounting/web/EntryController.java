@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
@@ -31,8 +33,6 @@ import fi.haagahelia.accounting.repository.EntryRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.EntryService;
 import jakarta.servlet.http.HttpSession;
-
-import org.springframework.web.bind.annotation.RequestParam;
 
 
 @Controller
@@ -303,17 +303,30 @@ public class EntryController {
         return "redirect:/entries";
     }
 
-    public String saveNewEntrySession(@ModelAttribute Entry entry,
-                                      @RequestParam("returnUrl") String returnUrl,
-                                      HttpSession session) {
+    @PostMapping("/addentry/category")
+    public String saveNewEntrySession(
+            @ModelAttribute Entry entry,
+            HttpSession session,
+            RedirectAttributes redirectAttributes) {
 
-        String sessionKey = entry.getType() != null
-                ? "sessionNewEntry_" + entry.getType().name()
-                : "sessionNewEntry";
+        EntryType type = entry.getType();
+
+        String sessionKey = type != null
+            ? "sessionNewEntry_" + type.name()
+            : "sessionNewEntry";
 
         session.setAttribute(sessionKey, entry);
 
-        return "redirect:" + returnUrl;
+        String returnUrl = "/addentry";
+
+        if (type != null) {
+            returnUrl += "?type=" + type.name();
+            redirectAttributes.addAttribute("entryType", type);
+        }
+
+        redirectAttributes.addAttribute("returnUrl", returnUrl);
+
+        return "redirect:/addcategory";
     }
 
 }

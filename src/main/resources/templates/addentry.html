@@ -60,10 +60,12 @@
                                     th:selected="${cat.category_id == entry.category?.category_id}"></option>
                         </select>
 
-                        <a class="btn btn-outline-primary" 
-                        th:href="@{/addcategory(returnUrl=${currentUrl}, entryType=${type})}">
+                        <button type="submit"
+                                class="btn btn-outline-primary"
+                                th:formaction="@{/addentry/category}"
+                                formnovalidate>
                             Add new
-                        </a>
+                        </button>
                     </div>
 
                     <!-- Account -->

@@ -107,23 +107,30 @@ public class CategoryController {
             throw new IllegalArgumentException("User not found");
         }
 
-        categoryService.createCategory(category, currentUser);
+        Category savedCategory = categoryService.createCategory(
+            category, currentUser
+        );
+
+        String sessionKey = null;
 
         if (entryId != null) {
-  
-            Object sessionEntry = session.getAttribute("sessionEditEntry_" + entryId);
-            if (sessionEntry != null) {
-                    session.setAttribute("sessionEditEntry_" + entryId, sessionEntry);
-                }
-            } else if (entryType != null) {
-    
-                Object sessionEntry = session.getAttribute("sessionNewEntry_" + entryType.name());
-                if (sessionEntry != null) {
-                    session.setAttribute("sessionNewEntry_" + entryType.name(), sessionEntry);
-                }
-            }
-            return "redirect:" + returnUrl;
+            sessionKey = "sessionEditEntry_" + entryId;
+        } else {
+            sessionKey = "sessionNewEntry_" + savedCategory.getType().name();
         }
+
+        if (sessionKey != null) {
+            Object draft = session.getAttribute(sessionKey);
+
+            if (draft instanceof Entry entry
+                    && entry.getType() == savedCategory.getType()) {
+                entry.setCategory(savedCategory);
+                session.setAttribute(sessionKey, entry);
+            }
+        }
+
+        return "redirect:" + returnUrl;
+    }
 
     @PostMapping("/deletecategory/{id}")
     public String deleteCategory(

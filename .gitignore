@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Database dumps
+*.dump
+
+# Application and performance test logs
+*.log
