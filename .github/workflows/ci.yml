@@ -37,3 +37,64 @@ jobs:
           path: target/surefire-reports/
           if-no-files-found: ignore
           retention-days: 7
+
+  deploy:
+    name: Deploy to Heroku
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    concurrency:
+      group: heroku-production
+      cancel-in-progress: false
+
+    env:
+      HEROKU_APP_NAME: morning-shelf-60131
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build Docker image
+        run: |
+          docker build --pull --platform linux/amd64 \
+            -t "registry.heroku.com/$HEROKU_APP_NAME/web" .
+
+      - name: Login to Heroku Container Registry
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          printf '%s' "$HEROKU_API_KEY" |
+            docker login registry.heroku.com \
+              --username _ \
+              --password-stdin
+
+      - name: Push Docker image
+        run: docker push "registry.heroku.com/$HEROKU_APP_NAME/web"
+
+      - name: Release Docker image
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          image_id=$(docker image inspect \
+            "registry.heroku.com/$HEROKU_APP_NAME/web" \
+            --format '{{.Id}}')
+
+          jq -n --arg image "$image_id" \
+            '{updates: [{type: "web", docker_image: $image}]}' \
+            > release.json
+
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 15 \
+            --max-time 120 \
+            --request PATCH \
+            "https://api.heroku.com/apps/$HEROKU_APP_NAME/formation" \
+            --header "Authorization: Bearer $HEROKU_API_KEY" \
+            --header "Accept: application/vnd.heroku+json; version=3.docker-releases" \
+            --header "Content-Type: application/json" \
+            --data-binary @release.json
+
+      - name: Logout from container registry
+        if: always()
+        run: docker logout registry.heroku.com
