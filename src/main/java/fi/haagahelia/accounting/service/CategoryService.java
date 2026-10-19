@@ -45,6 +45,12 @@ public class CategoryService {
             );
         }
 
+        if (categoryRepository.existsBySyncId(category.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Category sync ID is already in use"
+            );
+        }
         category.setUser(currentUser);
         return categoryRepository.save(category);
     }
@@ -89,7 +95,9 @@ public class CategoryService {
                 category.getCategory_id(),
                 category.getName(),
                 category.getType(),
-                category.isGlobal()
+                category.isGlobal(),
+                category.getSyncId(),
+                category.getVersion()
             ))
             .toList();
     }

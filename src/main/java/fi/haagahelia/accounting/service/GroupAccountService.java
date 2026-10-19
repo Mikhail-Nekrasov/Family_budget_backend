@@ -262,7 +262,9 @@ public class GroupAccountService {
             entry.getAccount().getAccount_id(),
             entry.getAccount().getName(),
             entry.getCategory().getCategory_id(),
-            entry.getCategory().getName()
+            entry.getCategory().getName(),
+            entry.getSyncId(),
+            entry.getVersion()
         ));
     }
 }

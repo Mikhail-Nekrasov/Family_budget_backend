@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,7 +61,9 @@ class AccountRestControllerTest {
             10L,
             "Cash",
             new BigDecimal("1000.00"),
-            "Cash account"
+            "Cash account",
+            UUID.fromString("00a0bc61-8318-4af6-bdee-9323851f8a12"),
+            0L
         );
 
         when(accountService.getAccounts(user))
@@ -77,7 +80,9 @@ class AccountRestControllerTest {
                     "id": 10,
                     "name": "Cash",
                     "amount": 1000.00,
-                    "description": "Cash account"
+                    "description": "Cash account",
+                    "syncId": "00a0bc61-8318-4af6-bdee-9323851f8a12",
+                    version: 0
                   }
                 ]
                 """, JsonCompareMode.STRICT));

@@ -3,8 +3,10 @@ package fi.haagahelia.accounting.model;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -19,6 +21,13 @@ public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long account_id;
+    @Column(
+        name = "sync_id",
+        nullable = false,
+        unique = true,
+        updatable = false
+    )
+    private UUID syncId = UUID.randomUUID();
     private String name;
     private BigDecimal amount;
     private String description;
@@ -56,6 +65,10 @@ public class Account {
 
     public Long getAccount_id() {
         return account_id;
+    }
+
+    public UUID getSyncId() {
+        return syncId;
     }
 
     public String getName() {
@@ -112,6 +125,20 @@ public class Account {
 
     public void setUser(User user) {
         this.user = user;
+    }
+
+    public void assignSyncId(UUID syncId) {
+        if (account_id != null) {
+            throw new IllegalStateException(
+                "Cannot change sync ID of a persisted account"
+            );
+        }
+
+        if (syncId == null) {
+            throw new IllegalArgumentException("Sync ID is required");
+        }
+
+        this.syncId = syncId;
     }
 
     @Override

@@ -46,6 +46,13 @@ public class AccountService {
             );
         }
 
+        if (accountRepository.existsBySyncId(account.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Account sync ID is already in use"
+            );
+        }
+        
         account.setUser(currentUser);
 
         if (account.getAmount() == null) {
@@ -96,7 +103,9 @@ public class AccountService {
                 account.getAccount_id(),
                 account.getName(),
                 account.getAmount(),
-                account.getDescription()
+                account.getDescription(),
+                account.getSyncId(),
+                account.getVersion()
             ))
             .toList();
     }

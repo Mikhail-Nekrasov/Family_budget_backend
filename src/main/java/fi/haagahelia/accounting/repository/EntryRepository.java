@@ -2,6 +2,8 @@ package fi.haagahelia.accounting.repository;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,5 +61,22 @@ public interface EntryRepository extends JpaRepository<Entry, Long> {
         Account account,
         EntryType type,
         Pageable pageable
+    );
+
+    @Query("""
+        SELECT COUNT(e) > 0
+        FROM Entry e
+        WHERE e.syncId = :syncId
+        """)
+    boolean existsBySyncId(@Param("syncId") UUID syncId);
+
+    @Query("""
+        SELECT e
+        FROM Entry e
+        WHERE e.syncId = :syncId AND e.user = :user
+        """)
+    Optional<Entry> findOwnedBySyncId(
+        @Param("syncId") UUID syncId,
+        @Param("user") User user
     );
 }

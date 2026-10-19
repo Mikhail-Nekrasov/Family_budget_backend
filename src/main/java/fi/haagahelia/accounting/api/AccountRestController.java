@@ -69,13 +69,19 @@ public class AccountRestController {
             currentUser
         );
 
+        if (request.syncId() != null) {
+            account.assignSyncId(request.syncId());
+        }
+
         Account saved = accountService.createAccount(account, currentUser);
 
         AccountResponse response = new AccountResponse(
             saved.getAccount_id(),
             saved.getName(),
             saved.getAmount(),
-            saved.getDescription()
+            saved.getDescription(),
+            saved.getSyncId(),
+            saved.getVersion()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);

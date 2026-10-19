@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.ui.Model;
@@ -121,7 +122,11 @@ public class CategoryControllerTest {
         when(categoryRepository.save(any(Category.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         String returnUrl = "/categories";
-        String result = categoryController.saveCategory(category, returnUrl, null, null, null, auth);
+        MockHttpSession session = new MockHttpSession();
+
+        String result = categoryController.saveCategory(
+            category, returnUrl, session, null, null, auth
+        );
 
         assertEquals("redirect:" + returnUrl, result);
         assertEquals("test_user", category.getUser().getUsername());

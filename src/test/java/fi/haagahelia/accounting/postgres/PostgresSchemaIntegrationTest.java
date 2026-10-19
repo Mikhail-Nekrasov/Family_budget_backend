@@ -194,4 +194,33 @@ class PostgresSchemaIntegrationTest {
             )
         );
     }
+
+    @Test
+    void rejectsNullAccountSyncId() {
+        assertThrows(
+            DataIntegrityViolationException.class,
+            () -> jdbcTemplate.update(
+                "UPDATE account SET sync_id = NULL WHERE account_id = ?",
+                accountId
+            )
+        );
+    }
+
+    @Test
+    void rejectsDuplicateAccountSyncId() {
+        assertThrows(
+            DataIntegrityViolationException.class,
+            () -> jdbcTemplate.update(
+                """
+                INSERT INTO account (
+                    name, amount, user_id, sync_id
+                )
+                SELECT 'Duplicate UUID account', 0, user_id, sync_id
+                FROM account
+                WHERE account_id = ?
+                """,
+                accountId
+            )
+        );
+    }
 }

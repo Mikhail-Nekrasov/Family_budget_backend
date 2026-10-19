@@ -3,7 +3,9 @@ package fi.haagahelia.accounting.model;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -12,18 +14,28 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Version;
 
 @Entity
 public class Entry {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(
+        name = "sync_id",
+        nullable = false,
+        unique = true,
+        updatable = false
+    )
+    private UUID syncId = UUID.randomUUID();
     private String title;
     @Enumerated(EnumType.STRING)
     private EntryType type; // "income" or "expense"
     private BigDecimal amount;
     private LocalDateTime dateTime;
     private String description;
+    @Version
+    private Long version;
 
     @ManyToOne
     @JoinColumn(name = "category_id")
@@ -54,6 +66,10 @@ public class Entry {
 
     public Long getId() {
         return id;
+    }
+
+    public UUID getSyncId() {
+        return syncId;
     }
 
     public String getTitle() {
@@ -129,5 +145,23 @@ public class Entry {
 
     public void setUser(User user) {
         this.user = user;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void assignSyncId(UUID syncId) {
+        if (id != null) {
+            throw new IllegalStateException(
+                "Cannot change sync ID of a persisted entry"
+            );
+        }
+
+        if (syncId == null) {
+            throw new IllegalArgumentException("Sync ID is required");
+        }
+
+        this.syncId = syncId;
     }
 }

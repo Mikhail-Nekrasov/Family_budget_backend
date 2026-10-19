@@ -3,6 +3,7 @@ package fi.haagahelia.accounting.model;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 public class Transfer {
@@ -10,6 +11,13 @@ public class Transfer {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(
+        name = "sync_id",
+        nullable = false,
+        unique = true,
+        updatable = false
+    )
+    private UUID syncId = UUID.randomUUID();
 
     @ManyToOne
     @JoinColumn(name = "from_account_id")
@@ -32,8 +40,9 @@ public class Transfer {
         this.dateTime = LocalDateTime.now();
     }
 
-    // probably this view is more comfortable to read
+    // probably this view is more comfortable to read?
     public Long getId() { return id; }
+    public UUID getSyncId() { return syncId; }
     public Account getFromAccount() { return fromAccount; }
     public void setFromAccount(Account fromAccount) { this.fromAccount = fromAccount; }
     public Account getToAccount() { return toAccount; }
@@ -44,5 +53,19 @@ public class Transfer {
     public void setDescription(String description) { this.description = description; }
     public LocalDateTime getDateTime() { return dateTime; }
     public void setDateTime(LocalDateTime dateTime) { this.dateTime = dateTime; }
+
+    public void assignSyncId(UUID syncId) {
+        if (id != null) {
+            throw new IllegalStateException(
+                "Cannot change sync ID of a persisted transfer"
+            );
+        }
+
+        if (syncId == null) {
+            throw new IllegalArgumentException("Sync ID is required");
+        }
+
+        this.syncId = syncId;
+    }
 }
 

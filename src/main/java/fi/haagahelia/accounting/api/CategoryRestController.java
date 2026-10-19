@@ -72,6 +72,9 @@ public class CategoryRestController {
             request.type(),
             currentUser
         );
+        if (request.syncId() != null) {
+            category.assignSyncId(request.syncId());
+        }
 
         Category saved = categoryService.createCategory(category, currentUser);
 
@@ -79,7 +82,9 @@ public class CategoryRestController {
             saved.getCategory_id(),
             saved.getName(),
             saved.getType(),
-            saved.isGlobal()
+            saved.isGlobal(),
+            saved.getSyncId(),
+            saved.getVersion()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);

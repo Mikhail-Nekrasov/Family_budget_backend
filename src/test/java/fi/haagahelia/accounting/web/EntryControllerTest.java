@@ -36,6 +36,7 @@ import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
 import fi.haagahelia.accounting.repository.GroupAccountAccessRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.AccountAccessService;
 import fi.haagahelia.accounting.service.EntryService;
@@ -80,7 +81,8 @@ public class EntryControllerTest {
             categoryRepository,
             new AccountAccessService(
                 mock(GroupAccountAccessRepository.class)
-            )
+            ),
+            mock(SyncTombstoneRepository.class)
         );
 
         entryController = new EntryController(

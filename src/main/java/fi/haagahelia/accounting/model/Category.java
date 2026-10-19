@@ -1,8 +1,10 @@
 package fi.haagahelia.accounting.model;
 
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -12,13 +14,23 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.Version;
 
 @Entity
 public class Category {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long category_id;
+    @Column(
+        name = "sync_id",
+        nullable = false,
+        unique = true,
+        updatable = false
+    )
+    private UUID syncId = UUID.randomUUID();
     private String name;
+    @Version
+    private Long version;
 
     @Enumerated(EnumType.STRING)
     private EntryType type;
@@ -41,6 +53,10 @@ public class Category {
 
     public Long getCategory_id() {
         return category_id;
+    }
+
+    public UUID getSyncId() {
+        return syncId;
     }
 
     public String getName() {
@@ -75,8 +91,26 @@ public class Category {
         this.user = user;
     }
 
+    public Long getVersion() {
+        return version;
+    }
+
     public boolean isGlobal() {
         return this.user == null;
+    }
+
+    public void assignSyncId(UUID syncId) {
+        if (category_id != null) {
+            throw new IllegalStateException(
+                "Cannot change sync ID of a persisted category"
+            );
+        }
+
+        if (syncId == null) {
+            throw new IllegalArgumentException("Sync ID is required");
+        }
+
+        this.syncId = syncId;
     }
 
     @Override
