@@ -12,14 +12,20 @@ import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.CategoryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 
 @Service
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final SyncTombstoneRepository syncTombstoneRepository;
 
-    public CategoryService(CategoryRepository categoryRepository) {
+    public CategoryService(
+        CategoryRepository categoryRepository,
+        SyncTombstoneRepository syncTombstoneRepository
+    ) {
         this.categoryRepository = categoryRepository;
+        this.syncTombstoneRepository = syncTombstoneRepository;
     }
 
     @Transactional
@@ -42,6 +48,14 @@ public class CategoryService {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Category type is required"
+            );
+        }
+
+        if (syncTombstoneRepository.categoryWasDeleted(
+                currentUser.getId(), category.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Category was deleted and cannot be recreated with the same sync ID"
             );
         }
 
@@ -80,6 +94,10 @@ public class CategoryService {
         }
 
         categoryRepository.deleteById(id);
+
+        syncTombstoneRepository.recordCategoryDeletion(
+            currentUser.getId(), category.getSyncId()
+        );
     }
 
     @Transactional(readOnly = true)

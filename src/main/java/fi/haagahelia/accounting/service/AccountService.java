@@ -16,17 +16,21 @@ import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 
 @Service
 public class AccountService {
 
     private final AccountRepository accountRepository;
     private final EntryRepository entryRepository;
+    private final SyncTombstoneRepository syncTombstoneRepository;
 
     public AccountService(AccountRepository accountRepository,
-                        EntryRepository entryRepository) {
+                        EntryRepository entryRepository,
+                        SyncTombstoneRepository syncTombstoneRepository) {
         this.accountRepository = accountRepository;
         this.entryRepository = entryRepository;
+        this.syncTombstoneRepository = syncTombstoneRepository;
     }
 
     @Transactional
@@ -43,6 +47,14 @@ public class AccountService {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Amount must have at most two decimal places"
+            );
+        }
+
+        if (syncTombstoneRepository.accountWasDeleted(
+                currentUser.getId(), account.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Account was deleted and cannot be recreated with the same sync ID"
             );
         }
 
@@ -92,6 +104,11 @@ public class AccountService {
         }
 
         accountRepository.deleteById(id);
+
+        syncTombstoneRepository.recordAccountDeletion(
+            currentUser.getId(), account.getSyncId()
+        );
+
         return true;
     }
 

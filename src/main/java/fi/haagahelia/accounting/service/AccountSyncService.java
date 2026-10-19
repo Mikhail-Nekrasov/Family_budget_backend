@@ -10,6 +10,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.AccountResponse;
 import fi.haagahelia.accounting.api.dto.CreateAccountRequest;
+import fi.haagahelia.accounting.api.dto.SyncDeleteAccountRequest;
+import fi.haagahelia.accounting.api.dto.SyncDeleteResponse;
 import fi.haagahelia.accounting.api.dto.SyncUpdateAccountRequest;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.User;
@@ -157,6 +159,68 @@ public class AccountSyncService {
                     account.getSyncId(),
                     account.getVersion()
                 );
+            }
+        );
+    }
+
+    @Transactional
+    public CompletedCommand deleteAccount(
+            UUID commandId,
+            SyncDeleteAccountRequest request,
+            User currentUser) {
+
+        UUID syncId = request.syncId();
+        Long expectedVersion = request.expectedVersion();
+
+        if (syncId == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Account sync ID is required"
+            );
+        }
+
+        if (expectedVersion == null || expectedVersion < 0) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "A non-negative expected version is required"
+            );
+        }
+
+        return syncCommandService.execute(
+            currentUser.getId(),
+            commandId,
+            "DELETE_ACCOUNT",
+            request,
+            HttpStatus.OK.value(),
+            () -> {
+                Account account = accountRepository.findOwnedBySyncId(
+                    syncId, currentUser
+                ).orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Account is unavailable for synchronization"
+                ));
+
+                if (!expectedVersion.equals(account.getVersion())) {
+                    throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Account version conflict. Synchronize before retrying."
+                    );
+                }
+
+                boolean deleted = accountService.deleteAccount(
+                    account.getAccount_id(), currentUser
+                );
+
+                if (!deleted) {
+                    throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Account with entries or transfers cannot be deleted"
+                    );
+                }
+
+                accountRepository.flush();
+
+                return new SyncDeleteResponse(syncId, true);
             }
         );
     }

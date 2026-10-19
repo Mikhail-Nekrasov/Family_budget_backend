@@ -26,6 +26,7 @@ import fi.haagahelia.accounting.model.Entry;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.CategoryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.CategoryService;
 
@@ -57,7 +58,10 @@ public class CategoryControllerTest {
         MockitoAnnotations.openMocks(this);
 
         CategoryService categoryService =
-            new CategoryService(categoryRepository);
+            new CategoryService(
+                categoryRepository,
+                org.mockito.Mockito.mock(SyncTombstoneRepository.class)
+            );
 
         categoryController = new CategoryController(
             categoryRepository,
