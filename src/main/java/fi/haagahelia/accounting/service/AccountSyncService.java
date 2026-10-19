@@ -21,6 +21,8 @@ import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedComman
 @Service
 public class AccountSyncService {
 
+    private final PersonalSyncPolicy personalSyncPolicy;
+
     private final AccountService accountService;
     private final SyncCommandService syncCommandService;
     private final AccountRepository accountRepository;
@@ -28,7 +30,10 @@ public class AccountSyncService {
     public AccountSyncService(
             AccountService accountService,
             SyncCommandService syncCommandService,
-            AccountRepository accountRepository) {
+            AccountRepository accountRepository,
+            PersonalSyncPolicy personalSyncPolicy) {
+
+        this.personalSyncPolicy = personalSyncPolicy;
 
         this.accountService = accountService;
         this.syncCommandService = syncCommandService;
@@ -132,6 +137,8 @@ public class AccountSyncService {
                     "Account is unavailable for synchronization"
                 ));
 
+                personalSyncPolicy.requirePrivateAccount(account);
+
                 if (!expectedVersion.equals(account.getVersion())) {
                     throw new ResponseStatusException(
                         HttpStatus.CONFLICT,
@@ -199,6 +206,8 @@ public class AccountSyncService {
                     HttpStatus.NOT_FOUND,
                     "Account is unavailable for synchronization"
                 ));
+
+                personalSyncPolicy.requirePrivateAccount(account);
 
                 if (!expectedVersion.equals(account.getVersion())) {
                     throw new ResponseStatusException(

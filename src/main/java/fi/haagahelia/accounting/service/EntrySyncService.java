@@ -23,6 +23,8 @@ import fi.haagahelia.accounting.model.User;
 @Service
 public class EntrySyncService {
 
+    private final PersonalSyncPolicy personalSyncPolicy;
+
     private final EntryService entryService;
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
@@ -34,7 +36,10 @@ public class EntrySyncService {
             AccountRepository accountRepository,
             CategoryRepository categoryRepository,
             SyncCommandService syncCommandService,
-            EntryRepository entryRepository) {
+            EntryRepository entryRepository,
+            PersonalSyncPolicy personalSyncPolicy) {
+
+        this.personalSyncPolicy = personalSyncPolicy;
 
         this.entryService = entryService;
         this.accountRepository = accountRepository;
@@ -88,6 +93,8 @@ public class EntrySyncService {
                     HttpStatus.BAD_REQUEST,
                     "Account is unavailable for synchronization"
                 ));
+
+                personalSyncPolicy.requirePrivateAccount(account);
 
                 var category = categoryRepository.findOwnedBySyncId(
                     categorySyncId, currentUser
@@ -169,6 +176,8 @@ public class EntrySyncService {
                     "Entry is unavailable for synchronization"
                 ));
 
+                personalSyncPolicy.requirePrivateAccount(existing.getAccount());
+
                 if (!expectedVersion.equals(existing.getVersion())) {
                     throw new ResponseStatusException(
                         HttpStatus.CONFLICT,
@@ -182,6 +191,8 @@ public class EntrySyncService {
                     HttpStatus.BAD_REQUEST,
                     "Account is unavailable for synchronization"
                 ));
+
+                personalSyncPolicy.requirePrivateAccount(account);
 
                 var category = categoryRepository.findOwnedBySyncId(
                     categorySyncId, currentUser
@@ -245,6 +256,8 @@ public class EntrySyncService {
                     HttpStatus.NOT_FOUND,
                     "Entry is unavailable for synchronization"
                 ));
+
+                personalSyncPolicy.requirePrivateAccount(existing.getAccount());
 
                 if (!expectedVersion.equals(existing.getVersion())) {
                     throw new ResponseStatusException(

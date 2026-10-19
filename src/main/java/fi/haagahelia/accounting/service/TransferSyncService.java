@@ -19,6 +19,8 @@ import fi.haagahelia.accounting.service.TransferService.TransferResult;
 @Service
 public class TransferSyncService {
 
+    private final PersonalSyncPolicy personalSyncPolicy;
+
     private final TransferService transferService;
     private final AccountRepository accountRepository;
     private final TransferRepository transferRepository;
@@ -28,7 +30,10 @@ public class TransferSyncService {
             TransferService transferService,
             AccountRepository accountRepository,
             TransferRepository transferRepository,
-            SyncCommandService syncCommandService) {
+            SyncCommandService syncCommandService,
+            PersonalSyncPolicy personalSyncPolicy) {
+
+        this.personalSyncPolicy = personalSyncPolicy;
 
         this.transferService = transferService;
         this.accountRepository = accountRepository;
@@ -92,6 +97,9 @@ public class TransferSyncService {
                     HttpStatus.BAD_REQUEST,
                     "Destination account is unavailable for synchronization"
                 ));
+
+                personalSyncPolicy.requirePrivateAccount(from);
+                personalSyncPolicy.requirePrivateAccount(to);
 
                 TransferResult result =
                     transferService.executeTransferWithSyncId(

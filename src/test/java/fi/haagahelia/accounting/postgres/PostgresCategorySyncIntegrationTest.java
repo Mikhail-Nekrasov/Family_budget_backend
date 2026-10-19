@@ -22,6 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.EntryType;
+import fi.haagahelia.accounting.model.Account;
+import fi.haagahelia.accounting.repository.AccountRepository;
+import java.math.BigDecimal;
+import jakarta.persistence.EntityManager;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
@@ -33,6 +37,12 @@ import fi.haagahelia.accounting.service.CategoryService;
 @Import(PostgresTestConfig.class)
 @Transactional
 class PostgresCategorySyncIntegrationTest {
+
+    @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
+    private AccountRepository accountRepository;
 
     @Autowired
     private MockMvc mockMvc;
@@ -246,5 +256,104 @@ class PostgresCategorySyncIntegrationTest {
                 commandId
             )
         );
+    }
+    @Test
+    void deletesCategoryOnceAndReturnsOriginalResultOnRetry() throws Exception {
+        Category category = categoryRepository.saveAndFlush(
+            new Category("Unused", EntryType.EXPENSE, owner)
+        );
+        UUID commandId = UUID.randomUUID();
+        String body = """
+            {"syncId":"%s", "expectedVersion":%d}
+            """.formatted(category.getSyncId(), category.getVersion());
+        String response = mockMvc.perform(
+                post("/api/sync/categories/{id}/delete", commandId)
+                    .with(user(owner.getUsername())).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content(body)
+            ).andExpect(status().isOk())
+            .andExpect(jsonPath("$.deleted").value(true))
+            .andReturn().getResponse().getContentAsString();
+        mockMvc.perform(post("/api/sync/categories/{id}/delete", commandId)
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andExpect(content().string(response));
+        assertEquals(0L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM category WHERE sync_id = ?", Long.class, category.getSyncId()));
+        assertEquals(1L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM sync_tombstone WHERE user_id = ? AND entity_type = 'CATEGORY' AND sync_id = ?",
+            Long.class, owner.getId(), category.getSyncId()));
+        assertEquals(1L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM sync_command WHERE user_id = ? AND command_id = ?",
+            Long.class, owner.getId(), commandId));
+    }
+
+    @Test
+    void rejectsStaleCategoryDeletion() throws Exception {
+        Category category = categoryRepository.saveAndFlush(
+            new Category("Original", EntryType.EXPENSE, owner)
+        );
+        Long oldVersion = category.getVersion();
+        category.setName("Changed");
+        categoryRepository.saveAndFlush(category);
+        UUID commandId = UUID.randomUUID();
+        mockMvc.perform(post("/api/sync/categories/{id}/delete", commandId)
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"syncId":"%s", "expectedVersion":%d}
+                    """.formatted(category.getSyncId(), oldVersion)))
+            .andExpect(status().isConflict());
+        assertEquals(1L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM category WHERE sync_id = ?", Long.class, category.getSyncId()));
+        assertEquals(0L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM sync_tombstone WHERE user_id = ? AND entity_type = 'CATEGORY' AND sync_id = ?",
+            Long.class, owner.getId(), category.getSyncId()));
+        assertEquals(0L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM sync_command WHERE user_id = ? AND command_id = ?",
+            Long.class, owner.getId(), commandId));
+    }
+
+    @Test
+    void cannotDeleteForeignCategoryOrCategoryWithEntries() throws Exception {
+        User other = new User();
+        other.setUsername("foreign_category_" + UUID.randomUUID());
+        other.setPassword("unused");
+        other = userRepository.saveAndFlush(other);
+        Category foreign = categoryRepository.saveAndFlush(
+            new Category("Foreign", EntryType.EXPENSE, other)
+        );
+        mockMvc.perform(post("/api/sync/categories/{id}/delete", UUID.randomUUID())
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"syncId":"%s", "expectedVersion":%d}
+                    """.formatted(foreign.getSyncId(), foreign.getVersion())))
+            .andExpect(status().isNotFound());
+
+        Category used = categoryRepository.saveAndFlush(
+            new Category("Used", EntryType.EXPENSE, owner)
+        );
+        Account account = accountRepository.saveAndFlush(
+            new Account("Cash", BigDecimal.ZERO, "", owner)
+        );
+        jdbcTemplate.update("""
+            INSERT INTO entry(title, type, amount, date_time, category_id, account_id, user_id)
+            VALUES ('Expense', 'EXPENSE', 1, LOCALTIMESTAMP, ?, ?, ?)
+            """, used.getCategory_id(), account.getAccount_id(), owner.getId());
+        entityManager.clear();
+        UUID commandId = UUID.randomUUID();
+        mockMvc.perform(post("/api/sync/categories/{id}/delete", commandId)
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"syncId":"%s", "expectedVersion":%d}
+                    """.formatted(used.getSyncId(), used.getVersion())))
+            .andExpect(status().isConflict());
+        assertEquals(0L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM sync_tombstone WHERE user_id = ? AND entity_type = 'CATEGORY' AND sync_id = ?",
+            Long.class, owner.getId(), used.getSyncId()));
+        assertEquals(0L, jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM sync_command WHERE user_id = ? AND command_id = ?",
+            Long.class, owner.getId(), commandId));
     }
 }

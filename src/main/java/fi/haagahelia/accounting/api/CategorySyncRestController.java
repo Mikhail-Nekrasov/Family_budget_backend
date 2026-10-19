@@ -14,13 +14,14 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.CreateCategoryRequest;
+import fi.haagahelia.accounting.api.dto.SyncDeleteCategoryRequest;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedCommand;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.CategorySyncService;
 
 @RestController
-@RequestMapping("/api/sync/categories")
+@RequestMapping("/api/sync/categories/{commandId}")
 public class CategorySyncRestController {
 
     private final CategorySyncService categorySyncService;
@@ -34,7 +35,7 @@ public class CategorySyncRestController {
         this.userRepository = userRepository;
     }
 
-    @PostMapping("/{commandId}")
+    @PostMapping
     public ResponseEntity<String> createCategory(
             @PathVariable("commandId") UUID commandId,
             @RequestBody CreateCategoryRequest request,
@@ -59,5 +60,20 @@ public class CategorySyncRestController {
             .status(result.responseStatus())
             .contentType(MediaType.APPLICATION_JSON)
             .body(result.responseBody());
+    }
+    @PostMapping("/delete")
+    public ResponseEntity<String> deleteCategory(
+            @PathVariable("commandId") UUID commandId,
+            @RequestBody SyncDeleteCategoryRequest request,
+            Authentication auth) {
+        User currentUser = userRepository.findByUsername(auth.getName());
+        if (currentUser == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found");
+        }
+        CompletedCommand result = categorySyncService.deleteCategory(
+            commandId, request, currentUser
+        );
+        return ResponseEntity.status(result.responseStatus())
+            .contentType(MediaType.APPLICATION_JSON).body(result.responseBody());
     }
 }
