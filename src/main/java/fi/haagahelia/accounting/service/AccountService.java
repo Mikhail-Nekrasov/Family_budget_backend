@@ -16,17 +16,21 @@ import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 
 @Service
 public class AccountService {
 
     private final AccountRepository accountRepository;
     private final EntryRepository entryRepository;
+    private final SyncTombstoneRepository syncTombstoneRepository;
 
     public AccountService(AccountRepository accountRepository,
-                        EntryRepository entryRepository) {
+                        EntryRepository entryRepository,
+                        SyncTombstoneRepository syncTombstoneRepository) {
         this.accountRepository = accountRepository;
         this.entryRepository = entryRepository;
+        this.syncTombstoneRepository = syncTombstoneRepository;
     }
 
     @Transactional
@@ -46,6 +50,21 @@ public class AccountService {
             );
         }
 
+        if (syncTombstoneRepository.accountWasDeleted(
+                currentUser.getId(), account.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Account was deleted and cannot be recreated with the same sync ID"
+            );
+        }
+
+        if (accountRepository.existsBySyncId(account.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Account sync ID is already in use"
+            );
+        }
+        
         account.setUser(currentUser);
 
         if (account.getAmount() == null) {
@@ -85,6 +104,11 @@ public class AccountService {
         }
 
         accountRepository.deleteById(id);
+
+        syncTombstoneRepository.recordAccountDeletion(
+            currentUser.getId(), account.getSyncId()
+        );
+
         return true;
     }
 
@@ -96,7 +120,9 @@ public class AccountService {
                 account.getAccount_id(),
                 account.getName(),
                 account.getAmount(),
-                account.getDescription()
+                account.getDescription(),
+                account.getSyncId(),
+                account.getVersion()
             ))
             .toList();
     }

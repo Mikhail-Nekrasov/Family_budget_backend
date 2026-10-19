@@ -2,6 +2,7 @@ package fi.haagahelia.accounting.api;
 
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -65,6 +66,18 @@ public class ApiExceptionHandler {
                 409,
                 "The account was updated by another request. "
                     + "Refresh the data and try again."
+            ));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrityConflict(
+            DataIntegrityViolationException exception) {
+
+        return ResponseEntity
+            .status(HttpStatus.CONFLICT)
+            .body(new ApiError(
+                409,
+                "The operation conflicts with existing data"
             ));
     }
 }

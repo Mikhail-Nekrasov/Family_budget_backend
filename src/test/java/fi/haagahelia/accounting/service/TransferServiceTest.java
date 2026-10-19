@@ -78,7 +78,7 @@ class TransferServiceTest {
         assertEquals(new BigDecimal("500"), to.getAmount());
 
         verify(accountRepository, never()).save(any(Account.class));
-        verifyNoInteractions(transferRepository);
+        verify(transferRepository, never()).save(any(Transfer.class));
     }
 
     @Test

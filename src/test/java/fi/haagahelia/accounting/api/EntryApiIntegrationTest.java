@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -360,6 +361,7 @@ class EntryApiIntegrationTest {
         );
 
         long entriesBefore = entryRepository.count();
+        Long originalVersion = entry.getVersion();
 
         mockMvc.perform(put("/api/entries/{id}", entry.getId())
                 .with(user(owner.getUsername()))
@@ -382,7 +384,11 @@ class EntryApiIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(entry.getId().intValue()))
             .andExpect(jsonPath("$.title").value("Updated expense"))
-            .andExpect(jsonPath("$.amount").value(200.00));
+            .andExpect(jsonPath("$.amount").value(200.00))
+            .andExpect(jsonPath("$.syncId")
+                .value(entry.getSyncId().toString()))
+            .andExpect(jsonPath("$.version")
+                .value(originalVersion.longValue() + 1));
 
         Account updatedAccount = accountRepository
             .findById(account.getAccount_id())
@@ -540,5 +546,88 @@ class EntryApiIntegrationTest {
             .andExpect(jsonPath("$.message").value(
                 "Invalid value for parameter: type"
             ));
+    }
+
+    @Test
+    void rejectsRepeatedExpenseWithoutChargingAccountTwice()
+            throws Exception {
+
+        Account account = accountRepository.save(
+            new Account(
+                "Sync test account",
+                new BigDecimal("100.00"),
+                "",
+                owner
+            )
+        );
+
+        Category category = categoryRepository.save(
+            new Category("Sync food", EntryType.EXPENSE, owner)
+        );
+
+        UUID syncId = UUID.randomUUID();
+        long entriesBefore = entryRepository.count();
+
+        String requestBody = """
+            {
+                "title": "Offline lunch",
+                "type": "EXPENSE",
+                "amount": 25.00,
+                "dateTime": "2026-10-19T12:00:00",
+                "description": "Sync test",
+                "accountId": %d,
+                "categoryId": %d,
+                "syncId": "%s"
+            }
+            """.formatted(
+                account.getAccount_id(),
+                category.getCategory_id(),
+                syncId
+            );
+
+        // First request creates the expense.
+        mockMvc.perform(post("/api/entries")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.syncId").value(syncId.toString()));
+
+        entryRepository.flush();
+
+        assertEquals(entriesBefore + 1, entryRepository.count());
+
+        Account afterFirstRequest = accountRepository
+            .findById(account.getAccount_id())
+            .orElseThrow();
+
+        assertEquals(
+            0,
+            new BigDecimal("75.00")
+                .compareTo(afterFirstRequest.getAmount())
+        );
+
+        // Repeating the same request must not charge the account again.
+        mockMvc.perform(post("/api/entries")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message")
+                .value("Entry sync ID is already in use"));
+
+        assertEquals(entriesBefore + 1, entryRepository.count());
+
+        Account afterRepeatedRequest = accountRepository
+            .findById(account.getAccount_id())
+            .orElseThrow();
+
+        assertEquals(
+            0,
+            new BigDecimal("75.00")
+                .compareTo(afterRepeatedRequest.getAmount())
+        );
     }
 }

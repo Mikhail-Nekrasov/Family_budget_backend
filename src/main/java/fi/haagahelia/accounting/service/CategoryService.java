@@ -12,14 +12,20 @@ import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.CategoryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 
 @Service
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final SyncTombstoneRepository syncTombstoneRepository;
 
-    public CategoryService(CategoryRepository categoryRepository) {
+    public CategoryService(
+        CategoryRepository categoryRepository,
+        SyncTombstoneRepository syncTombstoneRepository
+    ) {
         this.categoryRepository = categoryRepository;
+        this.syncTombstoneRepository = syncTombstoneRepository;
     }
 
     @Transactional
@@ -45,6 +51,20 @@ public class CategoryService {
             );
         }
 
+        if (syncTombstoneRepository.categoryWasDeleted(
+                currentUser.getId(), category.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Category was deleted and cannot be recreated with the same sync ID"
+            );
+        }
+
+        if (categoryRepository.existsBySyncId(category.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Category sync ID is already in use"
+            );
+        }
         category.setUser(currentUser);
         return categoryRepository.save(category);
     }
@@ -74,6 +94,10 @@ public class CategoryService {
         }
 
         categoryRepository.deleteById(id);
+
+        syncTombstoneRepository.recordCategoryDeletion(
+            currentUser.getId(), category.getSyncId()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -89,7 +113,9 @@ public class CategoryService {
                 category.getCategory_id(),
                 category.getName(),
                 category.getType(),
-                category.isGlobal()
+                category.isGlobal(),
+                category.getSyncId(),
+                category.getVersion()
             ))
             .toList();
     }

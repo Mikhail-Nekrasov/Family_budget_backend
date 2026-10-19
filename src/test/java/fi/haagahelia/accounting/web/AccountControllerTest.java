@@ -24,6 +24,7 @@ import fi.haagahelia.accounting.model.Transfer;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.AccountService;
 
@@ -45,7 +46,9 @@ public class AccountControllerTest {
         model = Mockito.mock(Model.class);
 
         AccountService accountService = new AccountService(
-            accountRepository, entryRepository
+            accountRepository,
+            entryRepository,
+            Mockito.mock(SyncTombstoneRepository.class)
         );
 
         accountController = new AccountController(

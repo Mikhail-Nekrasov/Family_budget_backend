@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,6 +78,8 @@ class TransferApiIntegrationTest {
             .andExpect(jsonPath("$.content.length()").value(1))
             .andExpect(jsonPath("$.content[0].id")
                 .value(ownTransfer.getId().intValue()))
+            .andExpect(jsonPath("$.content[0].syncId")
+                .value(ownTransfer.getSyncId().toString()))
             .andExpect(jsonPath("$.content[0].fromAccountName").value("Bank"))
             .andExpect(jsonPath("$.content[0].toAccountName").value("Cash"))
             .andExpect(jsonPath("$.content[0].amount").value(25.00))
@@ -232,5 +235,179 @@ class TransferApiIntegrationTest {
             .andExpect(jsonPath("$.content.length()").value(1))
             .andExpect(jsonPath("$.content[0].id")
                 .value(older.getId().intValue()));
+    }
+
+    @Test
+    void rejectsRepeatedTransferWithoutMovingMoneyTwice()
+            throws Exception {
+
+        User owner = createUser("api_transfer_sync_owner");
+
+        Account source = createAccount("Source", owner);
+        Account destination = createAccount("Destination", owner);
+
+        UUID syncId = UUID.randomUUID();
+        long transfersBefore = transferRepository.count();
+
+        String requestBody = """
+            {
+                "fromAccountId": %d,
+                "toAccountId": %d,
+                "amount": 75.00,
+                "description": "Offline transfer",
+                "syncId": "%s"
+            }
+            """.formatted(
+                source.getAccount_id(),
+                destination.getAccount_id(),
+                syncId
+            );
+
+        // Both accounts initially contain 100.
+        mockMvc.perform(post("/api/transfers")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().isCreated());
+
+        transferRepository.flush();
+
+        Account sourceAfterFirst = accountRepository
+            .findById(source.getAccount_id())
+            .orElseThrow();
+
+        Account destinationAfterFirst = accountRepository
+            .findById(destination.getAccount_id())
+            .orElseThrow();
+
+        assertEquals(
+            0,
+            new BigDecimal("25.00")
+                .compareTo(sourceAfterFirst.getAmount())
+        );
+        assertEquals(
+            0,
+            new BigDecimal("175.00")
+                .compareTo(destinationAfterFirst.getAmount())
+        );
+        assertEquals(transfersBefore + 1, transferRepository.count());
+
+        // The same UUID must be rejected before another transfer occurs.
+        mockMvc.perform(post("/api/transfers")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message")
+                .value("Transfer sync ID is already in use"));
+
+        Account sourceAfterRepeat = accountRepository
+            .findById(source.getAccount_id())
+            .orElseThrow();
+
+        Account destinationAfterRepeat = accountRepository
+            .findById(destination.getAccount_id())
+            .orElseThrow();
+
+        assertEquals(
+            0,
+            new BigDecimal("25.00")
+                .compareTo(sourceAfterRepeat.getAmount())
+        );
+        assertEquals(
+            0,
+            new BigDecimal("175.00")
+                .compareTo(destinationAfterRepeat.getAmount())
+        );
+        assertEquals(transfersBefore + 1, transferRepository.count());
+
+        mockMvc.perform(get("/api/transfers")
+                .with(user(owner.getUsername()))
+                .accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.content[0].syncId")
+                .value(syncId.toString()));
+    }
+
+    @Test
+    void rejectsForeignTransferSyncIdWithoutMovingMoney()
+            throws Exception {
+
+        User owner = createUser("api_transfer_sync_requester");
+        User other = createUser("api_transfer_sync_other");
+
+        Account source = createAccount("Own source", owner);
+        Account destination = createAccount("Own destination", owner);
+
+        Account foreignSource = createAccount("Private source", other);
+        Account foreignDestination = createAccount(
+            "Private destination", other
+        );
+
+        Transfer foreignTransfer = transferRepository.saveAndFlush(
+            new Transfer(
+                foreignSource,
+                foreignDestination,
+                new BigDecimal("10.00"),
+                "Private transfer"
+            )
+        );
+
+        long transfersBefore = transferRepository.count();
+
+        mockMvc.perform(post("/api/transfers")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "fromAccountId": %d,
+                        "toAccountId": %d,
+                        "amount": 25.00,
+                        "description": "Attempted duplicate",
+                        "syncId": "%s"
+                    }
+                    """.formatted(
+                        source.getAccount_id(),
+                        destination.getAccount_id(),
+                        foreignTransfer.getSyncId()
+                    )))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message")
+                .value("Transfer sync ID is already in use"))
+            .andExpect(jsonPath("$.fromAccountId").doesNotExist())
+            .andExpect(jsonPath("$.toAccountId").doesNotExist())
+            .andExpect(jsonPath("$.description").doesNotExist());
+
+        assertEquals(transfersBefore, transferRepository.count());
+
+        Account unchangedSource = accountRepository
+            .findById(source.getAccount_id())
+            .orElseThrow();
+
+        Account unchangedDestination = accountRepository
+            .findById(destination.getAccount_id())
+            .orElseThrow();
+
+        assertEquals(
+            0,
+            new BigDecimal("100.00")
+                .compareTo(unchangedSource.getAmount())
+        );
+        assertEquals(
+            0,
+            new BigDecimal("100.00")
+                .compareTo(unchangedDestination.getAmount())
+        );
+
+        mockMvc.perform(get("/api/transfers")
+                .with(user(owner.getUsername()))
+                .accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(0))
+            .andExpect(jsonPath("$.content.length()").value(0));
     }
 }

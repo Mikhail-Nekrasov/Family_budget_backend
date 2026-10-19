@@ -4,6 +4,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -11,6 +12,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -124,6 +127,7 @@ class CategoryApiIntegrationTest {
         assertEquals(1, categories.size());
 
         Category saved = categories.get(0);
+        assertNotNull(saved.getSyncId());
         assertEquals(owner.getId(), saved.getUser().getId());
         assertEquals(EntryType.EXPENSE, saved.getType());
         assertFalse(saved.isGlobal());
@@ -207,5 +211,125 @@ class CategoryApiIntegrationTest {
         assertTrue(
             categoryRepository.findById(category.getCategory_id()).isPresent()
         );
+    }
+
+    @Test
+    void createsAndReturnsCategoryWithClientSyncId() throws Exception {
+        User owner = createUser("api_category_sync_owner");
+        UUID syncId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/categories")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "name": "Offline category",
+                        "type": "EXPENSE",
+                        "syncId": "%s"
+                    }
+                    """.formatted(syncId)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.syncId").value(syncId.toString()));
+
+        categoryRepository.flush();
+
+        var categories = categoryRepository.findByUser(owner);
+
+        assertEquals(1, categories.size());
+        assertEquals(syncId, categories.get(0).getSyncId());
+        assertEquals(owner.getId(), categories.get(0).getUser().getId());
+
+        mockMvc.perform(get("/api/categories")
+                .with(user(owner.getUsername()))
+                .accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].syncId").value(syncId.toString()));
+    }
+
+    @Test
+    void rejectsDuplicateCategorySyncIdWithoutChangingCategory()
+            throws Exception {
+
+        User owner = createUser("api_category_duplicate_sync_owner");
+
+        Category existing = categoryRepository.saveAndFlush(
+            new Category("Original category", EntryType.EXPENSE, owner)
+        );
+
+        mockMvc.perform(post("/api/categories")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "name": "Duplicate category",
+                        "type": "INCOME",
+                        "syncId": "%s"
+                    }
+                    """.formatted(existing.getSyncId())))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message")
+                .value("Category sync ID is already in use"));
+
+        var categories = categoryRepository.findByUser(owner);
+
+        assertEquals(1, categories.size());
+        assertEquals(
+            existing.getCategory_id(),
+            categories.get(0).getCategory_id()
+        );
+        assertEquals("Original category", categories.get(0).getName());
+        assertEquals(EntryType.EXPENSE, categories.get(0).getType());
+    }
+
+    @Test
+    void rejectsForeignCategorySyncIdWithoutChangingCategories()
+            throws Exception {
+
+        User owner = createUser("api_category_sync_actual_owner");
+        User otherUser = createUser("api_category_sync_other_user");
+
+        Category existing = categoryRepository.saveAndFlush(
+            new Category("Private category", EntryType.EXPENSE, owner)
+        );
+
+        mockMvc.perform(post("/api/categories")
+                .with(user(otherUser.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "name": "Attempted duplicate",
+                        "type": "INCOME",
+                        "syncId": "%s"
+                    }
+                    """.formatted(existing.getSyncId())))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message")
+                .value("Category sync ID is already in use"))
+            .andExpect(jsonPath("$.name").doesNotExist())
+            .andExpect(jsonPath("$.type").doesNotExist())
+            .andExpect(jsonPath("$.user").doesNotExist());
+
+        assertEquals(
+            0,
+            categoryRepository.findByUser(otherUser).size()
+        );
+
+        var ownerCategories = categoryRepository.findByUser(owner);
+
+        assertEquals(1, ownerCategories.size());
+
+        Category unchanged = ownerCategories.get(0);
+
+        assertEquals(
+            existing.getCategory_id(),
+            unchanged.getCategory_id()
+        );
+        assertEquals("Private category", unchanged.getName());
+        assertEquals(EntryType.EXPENSE, unchanged.getType());
+        assertEquals(owner.getId(), unchanged.getUser().getId());
     }
 }

@@ -10,6 +10,8 @@ import fi.haagahelia.accounting.model.Transfer;
 import fi.haagahelia.accounting.model.User;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.time.LocalDateTime;
 
 
@@ -35,4 +37,17 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
         Pageable pageable
     );
 
+    @Query("""
+        SELECT COUNT(t) > 0
+        FROM Transfer t
+        WHERE t.syncId = :syncId
+        """)
+    boolean existsBySyncId(@Param("syncId") UUID syncId);
+
+    @Query("""
+        SELECT t
+        FROM Transfer t
+        WHERE t.syncId = :syncId
+        """)
+    Optional<Transfer> findBySyncId(@Param("syncId") UUID syncId);
 }

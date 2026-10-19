@@ -2,6 +2,7 @@ package fi.haagahelia.accounting.api.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record TransferResponse(
     Long id,
@@ -11,6 +12,7 @@ public record TransferResponse(
     String toAccountName,
     BigDecimal amount,
     LocalDateTime dateTime,
-    String description
+    String description,
+    UUID syncId
 ) {
 }

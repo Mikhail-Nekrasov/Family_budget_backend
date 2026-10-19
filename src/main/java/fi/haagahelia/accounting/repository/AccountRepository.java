@@ -2,6 +2,8 @@ package fi.haagahelia.accounting.repository;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -22,4 +24,20 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
         """)
     BigDecimal sumAmountByUser(@Param("user") User user);
 
+    @Query("""
+        SELECT COUNT(a) > 0
+        FROM Account a
+        WHERE a.syncId = :syncId
+        """)
+    boolean existsBySyncId(@Param("syncId") UUID syncId);
+
+    @Query("""
+        SELECT a
+        FROM Account a
+        WHERE a.syncId = :syncId AND a.user = :user
+        """)
+    Optional<Account> findOwnedBySyncId(
+        @Param("syncId") UUID syncId,
+        @Param("user") User user
+    );
 }

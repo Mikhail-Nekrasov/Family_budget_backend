@@ -2,6 +2,7 @@ package fi.haagahelia.accounting.api.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import fi.haagahelia.accounting.model.EntryType;
 
@@ -12,6 +13,7 @@ public record CreateEntryRequest(
     LocalDateTime dateTime,
     String description,
     Long accountId,
-    Long categoryId
+    Long categoryId,
+    UUID syncId
 ) {
 }

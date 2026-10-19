@@ -1,7 +1,9 @@
 package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -40,45 +42,16 @@ public class TransferService {
     }
 
     @Transactional
-    public TransferResult executeTransfer(Long fromId,
-                                          Long toId,
-                                          BigDecimal amount,
-                                          String description,
-                                          User currentUser) {
+    public TransferResult executeTransfer(
+            Long fromId,
+            Long toId,
+            BigDecimal amount,
+            String description,
+            User currentUser) {
 
-        Account from = accountRepository.findById(fromId).orElse(null);
-        Account to = accountRepository.findById(toId).orElse(null);
-
-        if (from == null || to == null
-                || !accountAccessService.canEdit(from, currentUser)
-                || !accountAccessService.canRead(to, currentUser)) {
-            return TransferResult.INVALID_ACCOUNTS;
-        }
-
-        if (fromId.equals(toId)) {
-            return TransferResult.SAME_ACCOUNT;
-        }
-
-        if (amount == null
-                || amount.compareTo(BigDecimal.ZERO) <= 0
-                || amount.stripTrailingZeros().scale() > 2) {
-            return TransferResult.INVALID_AMOUNT;
-        }
-
-        if (from.getAmount().compareTo(amount) < 0) {
-            return TransferResult.INSUFFICIENT_FUNDS;
-        }
-
-        from.setAmount(from.getAmount().subtract(amount));
-        to.setAmount(to.getAmount().add(amount));
-
-        accountRepository.save(from);
-        accountRepository.save(to);
-
-        Transfer transfer = new Transfer(from, to, amount, description);
-        transferRepository.save(transfer);
-
-        return TransferResult.SUCCESS;
+        return executeTransferWithSyncId(
+            fromId, toId, amount, description, currentUser, null
+        );
     }
 
     @Transactional(readOnly = true)
@@ -103,7 +76,65 @@ public class TransferService {
                 transfer.getToAccount().getName(),
                 transfer.getAmount(),
                 transfer.getDateTime(),
-                transfer.getDescription()
+                transfer.getDescription(),
+                transfer.getSyncId()
             ));
+    }
+
+    @Transactional
+    public TransferResult executeTransferWithSyncId(
+            Long fromId,
+            Long toId,
+            BigDecimal amount,
+            String description,
+            User currentUser,
+            @Nullable UUID syncId) {
+
+        Account from = accountRepository.findById(fromId).orElse(null);
+        Account to = accountRepository.findById(toId).orElse(null);
+
+        if (from == null || to == null
+                || !accountAccessService.canEdit(from, currentUser)
+                || !accountAccessService.canRead(to, currentUser)) {
+            return TransferResult.INVALID_ACCOUNTS;
+        }
+
+        if (fromId.equals(toId)) {
+            return TransferResult.SAME_ACCOUNT;
+        }
+
+        if (amount == null
+                || amount.compareTo(BigDecimal.ZERO) <= 0
+                || amount.stripTrailingZeros().scale() > 2) {
+            return TransferResult.INVALID_AMOUNT;
+        }
+
+        Transfer transfer = new Transfer(
+            from, to, amount, description
+        );
+
+        if (syncId != null) {
+            transfer.assignSyncId(syncId);
+        }
+
+        if (transferRepository.existsBySyncId(transfer.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Transfer sync ID is already in use"
+            );
+        }
+
+        if (from.getAmount().compareTo(amount) < 0) {
+            return TransferResult.INSUFFICIENT_FUNDS;
+        }
+
+        from.setAmount(from.getAmount().subtract(amount));
+        to.setAmount(to.getAmount().add(amount));
+
+        accountRepository.save(from);
+        accountRepository.save(to);
+        transferRepository.save(transfer);
+
+        return TransferResult.SUCCESS;
     }
 }

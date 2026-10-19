@@ -25,6 +25,7 @@ import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 
 @Service
 public class EntryService {
@@ -33,15 +34,18 @@ public class EntryService {
     private final AccountRepository accountRepository;
     private final CategoryRepository categoryRepository;
     private final AccountAccessService accountAccessService;
+    private final SyncTombstoneRepository syncTombstoneRepository;
 
     public EntryService(EntryRepository entryRepository,
                         AccountRepository accountRepository,
                         CategoryRepository categoryRepository,
-                        AccountAccessService accountAccessService) {
+                        AccountAccessService accountAccessService,
+                        SyncTombstoneRepository syncTombstoneRepository) {
         this.entryRepository = entryRepository;
         this.accountRepository = accountRepository;
         this.categoryRepository = categoryRepository;
         this.accountAccessService = accountAccessService;
+        this.syncTombstoneRepository = syncTombstoneRepository;
     }
 
     private void validateEntryReferences(
@@ -130,6 +134,22 @@ public class EntryService {
         );
     }    
         validateEntryReferences(entry, currentUser, null);
+
+        if (syncTombstoneRepository.entryWasDeleted(
+                entry.getAccount().getUser().getId(),
+                entry.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Entry was deleted and cannot be recreated with the same sync ID"
+            );
+        }
+
+        if (entryRepository.existsBySyncId(entry.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Entry sync ID is already in use"
+            );
+        }
 
         Account account = entry.getAccount();
         entry.setUser(account.getUser());
@@ -252,6 +272,10 @@ public class EntryService {
         accountRepository.save(account);
 
         entryRepository.delete(entry);
+        syncTombstoneRepository.recordEntryDeletion(
+            account.getUser().getId(),
+            entry.getSyncId()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -292,7 +316,9 @@ public class EntryService {
             entry.getAccount().getAccount_id(),
             entry.getAccount().getName(),
             entry.getCategory().getCategory_id(),
-            entry.getCategory().getName()
+            entry.getCategory().getName(),
+            entry.getSyncId(),
+            entry.getVersion()
         ));
     }
 
@@ -330,6 +356,10 @@ public class EntryService {
             currentUser
         );
 
+        if (request.syncId() != null) {
+            entry.assignSyncId(request.syncId());
+        }
+
         createEntry(entry, currentUser);
 
         return new EntryResponse(
@@ -342,7 +372,9 @@ public class EntryService {
             entry.getAccount().getAccount_id(),
             entry.getAccount().getName(),
             entry.getCategory().getCategory_id(),
-            entry.getCategory().getName()
+            entry.getCategory().getName(),
+            entry.getSyncId(),
+            entry.getVersion()
         );
     }
 
@@ -381,6 +413,7 @@ public class EntryService {
         );
 
         Entry updated = updateEntry(id, editedEntry, currentUser);
+        entryRepository.flush();
 
         return new EntryResponse(
             updated.getId(),
@@ -392,7 +425,9 @@ public class EntryService {
             updated.getAccount().getAccount_id(),
             updated.getAccount().getName(),
             updated.getCategory().getCategory_id(),
-            updated.getCategory().getName()
+            updated.getCategory().getName(),
+            updated.getSyncId(),
+            updated.getVersion()
         );
     }
 

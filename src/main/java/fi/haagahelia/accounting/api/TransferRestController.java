@@ -83,12 +83,13 @@ public class TransferRestController {
             );
         }
 
-        TransferResult result = transferService.executeTransfer(
+        TransferResult result = transferService.executeTransferWithSyncId(
             request.fromAccountId(),
             request.toAccountId(),
             request.amount(),
             request.description(),
-            currentUser
+            currentUser,
+            request.syncId()
         );
 
         return switch (result) {
