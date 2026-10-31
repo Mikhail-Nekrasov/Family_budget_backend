@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import fi.haagahelia.accounting.model.Category;
@@ -32,6 +34,7 @@ import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.EntryService;
+import fi.haagahelia.accounting.service.EntrySummaryService;
 import jakarta.servlet.http.HttpSession;
 
 
@@ -48,34 +51,45 @@ public class EntryController {
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
     private final EntryService entryService;
+    private final EntrySummaryService entrySummaryService;
 
-    public EntryController(EntryRepository entryRepository,
-                        CategoryRepository categoryRepository,
-                        AccountRepository accountRepository,
-                        UserRepository userRepository,
-                        EntryService entryService) {
+    public EntryController(
+            EntryRepository entryRepository,
+            CategoryRepository categoryRepository,
+            AccountRepository accountRepository,
+            UserRepository userRepository,
+            EntryService entryService,
+            EntrySummaryService entrySummaryService) {
+
         this.entryRepository = entryRepository;
         this.categoryRepository = categoryRepository;
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.entryService = entryService;
+        this.entrySummaryService = entrySummaryService;
     }
 
     @GetMapping("/entries")
     public String getEntries(
-            @RequestParam(value = "type", required = false) EntryType type,
-            @RequestParam(value = "page", defaultValue = "0") int page,
-            @RequestParam(value = "size", defaultValue = "5") int size,
+            @RequestParam(value = "type", required = false)
+            EntryType type,
+            @RequestParam(value = "page", defaultValue = "0")
+            int page,
+            @RequestParam(value = "size", defaultValue = "5")
+            int size,
             Model model,
-            Authentication auth) {
+            Authentication auth,
+            @RequestParam(value = "currency", defaultValue = "EUR")
+            String currency) {
 
-        User currentUser = userRepository.findByUsername(auth.getName());
-        
+        User currentUser = userRepository.findByUsername(
+            auth.getName()
+        );
+
         if (currentUser == null) {
             throw new IllegalArgumentException("User not found");
-        }  
+        }
 
-        // Sorting by date
         Sort sort = Sort.by(
             TypedPropertyPath.<Entry, LocalDateTime>of(
                 entry -> entry.getDateTime()
@@ -87,49 +101,58 @@ public class EntryController {
         Page<Entry> entryPage;
 
         if (type == null) {
-            entryPage = entryRepository.findByUser(currentUser, pageable);
+            entryPage = entryRepository.findByUser(
+                currentUser,
+                pageable
+            );
         } else {
-            entryPage = entryRepository.findByUserAndType(currentUser, type, pageable);
+            entryPage = entryRepository.findByUserAndType(
+                currentUser,
+                type,
+                pageable
+            );
         }
 
-        List<Entry> entries = entryPage.getContent();
+        String pageTitle = type == null
+            ? "All entries"
+            : type == EntryType.EXPENSE
+                ? "Expenses"
+                : "Incomes";
 
-        // Calculate totals in the database
-        BigDecimal total;
-
-        if (type == null) {
-            BigDecimal incomeSum = entryRepository.sumAmountByUserAndType(
-                currentUser, EntryType.INCOME
-            );
-
-            BigDecimal expenseSum = entryRepository.sumAmountByUserAndType(
-                currentUser, EntryType.EXPENSE
-            );
-
-            incomeSum = incomeSum != null ? incomeSum : BigDecimal.ZERO;
-            expenseSum = expenseSum != null ? expenseSum : BigDecimal.ZERO;
-
-            total = incomeSum.subtract(expenseSum);
-        } else {
-            BigDecimal sum = entryRepository.sumAmountByUserAndType(
-                currentUser, type
-            );
-
-            total = sum != null ? sum : BigDecimal.ZERO;
-        }
-
-        // Page Title
-        String pageTitle = (type == null)
-                ? "All entries"
-                : (type == EntryType.EXPENSE ? "Expenses" : "Incomes");
-
-        // Data for a template
-        model.addAttribute("entries", entries);
+        model.addAttribute("entries", entryPage.getContent());
         model.addAttribute("pageTitle", pageTitle);
         model.addAttribute("type", type);
-        model.addAttribute("total", total);
         model.addAttribute("currentPage", page);
         model.addAttribute("totalPages", entryPage.getTotalPages());
+        model.addAttribute("totalUnavailable", false);
+        model.addAttribute("total", null);
+
+        try {
+            var summary = entrySummaryService.getSummary(
+                currentUser,
+                currency
+            );
+
+            BigDecimal total = type == null
+                ? summary.netAmount()
+                : type == EntryType.INCOME
+                    ? summary.totalIncome()
+                    : summary.totalExpense();
+
+            model.addAttribute("total", total);
+            model.addAttribute(
+                "currencyCode",
+                summary.currencyCode()
+            );
+        } catch (ResponseStatusException exception) {
+            if (!HttpStatus.SERVICE_UNAVAILABLE.equals(
+                    exception.getStatusCode())) {
+                throw exception;
+            }
+
+            model.addAttribute("totalUnavailable", true);
+            model.addAttribute("currencyCode", currency);
+        }
 
         return "entries";
     }

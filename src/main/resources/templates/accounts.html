@@ -16,7 +16,14 @@
 
     <!-- Total -->
     <div class="alert alert-info fw-bold">
-        Total: <span th:text="${total}"></span>
+        <div th:if="${totalUnavailable}">
+            Total balance is temporarily unavailable
+        </div>
+
+        <div
+            th:unless="${totalUnavailable}"
+            th:text="|Total: ${totalBalance.amount} ${totalBalance.currencyCode}|">
+        </div>
     </div>
 
     <!-- Accounts -->
@@ -34,11 +41,13 @@
         <tr th:each="acc : ${accounts}">
             <td th:text="${acc.name}"></td>
             <td th:text="${acc.description}"></td>
-            <td th:text="${accountSpent[acc.account_id]}">0.00</td>
-            <td th:text="${acc.amount}">0.00</td>
+            <td th:text="|${accountSpent[acc.account_id]} ${acc.currencyCode}|"></td>
+            <td th:text="|${acc.amount} ${acc.currencyCode}|"></td>
             <td>
                 <!-- Delete (if possible, there should not be Entries or any Transfers) -->
-                <form th:if="${acc.entries.empty and acc.fromTransfers.empty and acc.toTransfers.empty}"
+                <form th:if="${#lists.isEmpty(acc.entries)
+                        and #lists.isEmpty(acc.fromTransfers)
+                        and #lists.isEmpty(acc.toTransfers)}"
                     th:action="@{/deleteaccount/{id}(id=${acc.account_id})}"
                     method="post"
                     style="display: inline;"

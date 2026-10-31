@@ -66,6 +66,7 @@ public class TransferSyncService {
         }
 
         BigDecimal amount = request.amount();
+        BigDecimal targetAmount = request.targetAmount();
 
         SyncCreateTransferRequest normalized =
             new SyncCreateTransferRequest(
@@ -74,7 +75,10 @@ public class TransferSyncService {
                 toSyncId,
                 amount == null ? null : amount.stripTrailingZeros(),
                 request.dateTime(),
-                request.description()
+                request.description(),
+                targetAmount == null
+                    ? null
+                    : targetAmount.stripTrailingZeros()
             );
 
         return syncCommandService.execute(
@@ -102,10 +106,11 @@ public class TransferSyncService {
                 personalSyncPolicy.requirePrivateAccount(to);
 
                 TransferResult result =
-                    transferService.executeTransferWithSyncId(
+                    transferService.executeTransferWithAmounts(
                         from.getAccount_id(),
                         to.getAccount_id(),
                         normalized.amount(),
+                        normalized.targetAmount(),
                         normalized.description(),
                         currentUser,
                         syncId
@@ -129,7 +134,10 @@ public class TransferSyncService {
                     saved.getAmount(),
                     saved.getDateTime(),
                     saved.getDescription(),
-                    saved.getSyncId()
+                    saved.getSyncId(),
+                    saved.getTargetAmount(),
+                    saved.getSourceCurrencyCode(),
+                    saved.getTargetCurrencyCode()
                 );
             }
         );
@@ -151,10 +159,21 @@ public class TransferSyncService {
                 "Source and destination accounts must be different"
             );
 
+            case DIFFERENT_CURRENCIES -> throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Destination amount is required for transfers between different currencies"
+            );
+
             case INVALID_AMOUNT -> throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Amount must be greater than zero "
                     + "and have at most two decimal places"
+            );
+
+            case INVALID_TARGET_AMOUNT -> throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Destination amount must be positive, have at most two decimal places "
+                    + "and equal the source amount for same-currency transfers"
             );
 
             case INSUFFICIENT_FUNDS -> throw new ResponseStatusException(

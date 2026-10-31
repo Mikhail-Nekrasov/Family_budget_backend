@@ -93,17 +93,17 @@ class PostgresPersonalSyncPolicyIntegrationTest {
     void queuedCommandsCannotChangeSharedAccountOrCreateExpenseOrTransfer() {
         share(source);
         conflict(() -> accountSync.updateAccount(UUID.randomUUID(),
-            new SyncUpdateAccountRequest(source.getSyncId(), source.getVersion(), "Changed", ""), owner));
+            new SyncUpdateAccountRequest(source.getSyncId(), source.getVersion(), "Changed", "", null), owner));
         conflict(() -> accountSync.deleteAccount(UUID.randomUUID(),
             new SyncDeleteAccountRequest(source.getSyncId(), source.getVersion()), owner));
         conflict(() -> entrySync.createEntry(UUID.randomUUID(), expense(UUID.randomUUID(), source), owner));
         conflict(() -> transferSync.createTransfer(UUID.randomUUID(), new SyncCreateTransferRequest(
             UUID.randomUUID(), source.getSyncId(), target.getSyncId(), BigDecimal.ONE,
-            LocalDateTime.of(2026, 10, 19, 12, 0), ""), owner));
+            LocalDateTime.of(2026, 10, 19, 12, 0), "", null), owner));
         // Shared destination is blocked too, even though both accounts belong to this user.
         conflict(() -> transferSync.createTransfer(UUID.randomUUID(), new SyncCreateTransferRequest(
             UUID.randomUUID(), target.getSyncId(), source.getSyncId(), BigDecimal.ONE,
-            LocalDateTime.of(2026, 10, 19, 12, 0), ""), owner));
+            LocalDateTime.of(2026, 10, 19, 12, 0), "", null), owner));
         assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM sync_command WHERE user_id = ?", Long.class, owner.getId()));
         assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM entry WHERE user_id = ?", Long.class, owner.getId()));
         assertEquals(0, new BigDecimal("100").compareTo(accounts.findById(source.getAccount_id()).orElseThrow().getAmount()));

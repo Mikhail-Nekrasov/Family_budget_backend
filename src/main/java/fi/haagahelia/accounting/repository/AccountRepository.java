@@ -1,6 +1,5 @@
 package fi.haagahelia.accounting.repository;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import fi.haagahelia.accounting.api.dto.CurrencyAmount;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.User;
 
@@ -18,11 +18,18 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     List<Account> findByUser(User user);
 
     @Query("""
-        SELECT SUM(a.amount)
+        SELECT new fi.haagahelia.accounting.api.dto.CurrencyAmount(
+            a.currencyCode,
+            SUM(a.amount)
+        )
         FROM Account a
         WHERE a.user = :user
+        GROUP BY a.currencyCode
+        ORDER BY a.currencyCode
         """)
-    BigDecimal sumAmountByUser(@Param("user") User user);
+    List<CurrencyAmount> sumBalancesByCurrency(
+        @Param("user") User user
+    );
 
     @Query("""
         SELECT COUNT(a) > 0
@@ -40,4 +47,5 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
         @Param("syncId") UUID syncId,
         @Param("user") User user
     );
+    Optional<Account> findBySyncId(UUID syncId);
 }

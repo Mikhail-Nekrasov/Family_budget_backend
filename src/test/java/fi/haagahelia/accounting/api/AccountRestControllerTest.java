@@ -63,7 +63,10 @@ class AccountRestControllerTest {
             new BigDecimal("1000.00"),
             "Cash account",
             UUID.fromString("00a0bc61-8318-4af6-bdee-9323851f8a12"),
-            0L
+            0L,
+            "EUR",
+            "cash",
+            null
         );
 
         when(accountService.getAccounts(user))
@@ -82,7 +85,10 @@ class AccountRestControllerTest {
                     "amount": 1000.00,
                     "description": "Cash account",
                     "syncId": "00a0bc61-8318-4af6-bdee-9323851f8a12",
-                    version: 0
+                    version: 0,
+                    "currencyCode": "EUR",
+                    "iconKey": "cash",
+                    "archivedAt": null
                   }
                 ]
                 """, JsonCompareMode.STRICT));

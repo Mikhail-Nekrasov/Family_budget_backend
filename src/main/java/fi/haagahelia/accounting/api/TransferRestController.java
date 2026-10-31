@@ -83,10 +83,11 @@ public class TransferRestController {
             );
         }
 
-        TransferResult result = transferService.executeTransferWithSyncId(
+        TransferResult result = transferService.executeTransferWithAmounts(
             request.fromAccountId(),
             request.toAccountId(),
             request.amount(),
+            request.targetAmount(),
             request.description(),
             currentUser,
             request.syncId()
@@ -108,11 +109,24 @@ public class TransferRestController {
                     "Source and destination accounts must be different"
                 );
 
+            case DIFFERENT_CURRENCIES ->
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Destination amount is required for transfers between different currencies"
+                );
+
             case INVALID_AMOUNT ->
                 throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Amount must be greater than zero "
                         + "and have at most two decimal places"
+                );
+
+            case INVALID_TARGET_AMOUNT ->
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Destination amount must be positive, have at most two decimal places "
+                        + "and equal the source amount for same-currency transfers"
                 );
 
             case INSUFFICIENT_FUNDS ->

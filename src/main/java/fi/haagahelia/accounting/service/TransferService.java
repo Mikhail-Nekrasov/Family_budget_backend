@@ -25,7 +25,9 @@ public class TransferService {
         SUCCESS,
         INVALID_ACCOUNTS,
         SAME_ACCOUNT,
+        DIFFERENT_CURRENCIES,
         INVALID_AMOUNT,
+        INVALID_TARGET_AMOUNT,
         INSUFFICIENT_FUNDS
     }
 
@@ -77,7 +79,10 @@ public class TransferService {
                 transfer.getAmount(),
                 transfer.getDateTime(),
                 transfer.getDescription(),
-                transfer.getSyncId()
+                transfer.getSyncId(),
+                transfer.getTargetAmount(),
+                transfer.getSourceCurrencyCode(),
+                transfer.getTargetCurrencyCode()
             ));
     }
 
@@ -86,6 +91,27 @@ public class TransferService {
             Long fromId,
             Long toId,
             BigDecimal amount,
+            String description,
+            User currentUser,
+            @Nullable UUID syncId) {
+
+        return executeTransferWithAmounts(
+            fromId,
+            toId,
+            amount,
+            null,
+            description,
+            currentUser,
+            syncId
+        );
+    }
+
+    @Transactional
+    public TransferResult executeTransferWithAmounts(
+            Long fromId,
+            Long toId,
+            BigDecimal amount,
+            @Nullable BigDecimal targetAmount,
             String description,
             User currentUser,
             @Nullable UUID syncId) {
@@ -109,9 +135,33 @@ public class TransferService {
             return TransferResult.INVALID_AMOUNT;
         }
 
+        boolean sameCurrency = from.getCurrencyCode()
+            .equals(to.getCurrencyCode());
+
+        BigDecimal creditedAmount = targetAmount;
+
+        if (creditedAmount == null) {
+            if (!sameCurrency) {
+                return TransferResult.DIFFERENT_CURRENCIES;
+            }
+
+            creditedAmount = amount;
+        }
+
+        if (creditedAmount.compareTo(BigDecimal.ZERO) <= 0
+                || creditedAmount.stripTrailingZeros().scale() > 2) {
+            return TransferResult.INVALID_TARGET_AMOUNT;
+        }
+
+        if (sameCurrency && creditedAmount.compareTo(amount) != 0) {
+            return TransferResult.INVALID_TARGET_AMOUNT;
+        }
+
         Transfer transfer = new Transfer(
             from, to, amount, description
         );
+
+        transfer.setTargetAmount(creditedAmount);
 
         if (syncId != null) {
             transfer.assignSyncId(syncId);
@@ -129,7 +179,7 @@ public class TransferService {
         }
 
         from.setAmount(from.getAmount().subtract(amount));
-        to.setAmount(to.getAmount().add(amount));
+        to.setAmount(to.getAmount().add(creditedAmount));
 
         accountRepository.save(from);
         accountRepository.save(to);

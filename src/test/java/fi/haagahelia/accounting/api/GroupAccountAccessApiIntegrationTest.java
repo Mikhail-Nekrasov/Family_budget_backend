@@ -40,6 +40,10 @@ class GroupAccountAccessApiIntegrationTest
             new Account("Trip account", new BigDecimal("100"), "", owner)
         );
 
+        account.setCurrencyCode("USD");
+        account.setIconKey("travel-fund");
+        accountRepository.saveAndFlush(account);
+
         mockMvc.perform(put(
                     "/api/groups/{groupId}/accounts/{accountId}",
                     group.getId(), account.getAccount_id()
@@ -52,7 +56,12 @@ class GroupAccountAccessApiIntegrationTest
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.permission").value("READ"))
-            .andExpect(jsonPath("$.name").value("Trip account"));
+            .andExpect(jsonPath("$.name").value("Trip account"))
+            .andExpect(jsonPath("$.currencyCode").value("USD"))
+            .andExpect(jsonPath("$.iconKey").value("travel-fund"))
+            .andExpect(jsonPath("$.archivedAt").value(
+                org.hamcrest.Matchers.nullValue()
+            ));
 
         mockMvc.perform(put(
                     "/api/groups/{groupId}/accounts/{accountId}",
@@ -244,6 +253,13 @@ class GroupAccountAccessApiIntegrationTest
             new Account("Shared account", new BigDecimal("100"), "", other)
         );
 
+        shared.setCurrencyCode("USD");
+        shared.setIconKey("travel-fund");
+        shared.setArchivedAt(
+            java.time.Instant.parse("2026-10-30T12:00:00Z")
+        );
+        accountRepository.saveAndFlush(shared);
+
         accountRepository.save(
             new Account("Private account", new BigDecimal("999"), "", other)
         );
@@ -258,7 +274,10 @@ class GroupAccountAccessApiIntegrationTest
             .andExpect(jsonPath("$.length()").value(1))
             .andExpect(jsonPath("$[0].name").value("Shared account"))
             .andExpect(jsonPath("$[0].amount").value(100))
-            .andExpect(jsonPath("$[0].permission").value("READ"));
+            .andExpect(jsonPath("$[0].permission").value("READ"))
+            .andExpect(jsonPath("$[0].currencyCode").value("USD"))
+            .andExpect(jsonPath("$[0].iconKey").value("travel-fund"))
+            .andExpect(jsonPath("$[0].archivedAt").isNotEmpty());
     }
 
     @Test

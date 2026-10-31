@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 public record EntrySummaryResponse(
     BigDecimal totalIncome,
     BigDecimal totalExpense,
-    BigDecimal netAmount
+    BigDecimal netAmount,
+    String currencyCode
 ) {
 }

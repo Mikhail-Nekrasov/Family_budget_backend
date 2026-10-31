@@ -25,6 +25,7 @@ import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.TransferRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.AccountBalanceService;
 import fi.haagahelia.accounting.service.AccountService;
 
 @SpringBootTest
@@ -51,6 +52,9 @@ class PostgresApiIntegrationTest {
 
     @Autowired
     private AccountService accountService;
+
+    @Autowired
+    private AccountBalanceService accountBalanceService;
 
     @Test
     void appliesInitialMigration() {
@@ -264,20 +268,39 @@ class PostgresApiIntegrationTest {
         other = userRepository.saveAndFlush(other);
 
         accountRepository.saveAndFlush(
-            new Account("Bank", new BigDecimal("100.00"), "", owner)
+            new Account(
+                "Bank",
+                new BigDecimal("100.00"),
+                "",
+                owner
+            )
         );
+
         accountRepository.saveAndFlush(
-            new Account("Debt", new BigDecimal("-25.00"), "", owner)
+            new Account(
+                "Debt",
+                new BigDecimal("-25.00"),
+                "",
+                owner
+            )
         );
+
         accountRepository.saveAndFlush(
-            new Account("Foreign", new BigDecimal("999.00"), "", other)
+            new Account(
+                "Foreign",
+                new BigDecimal("999.00"),
+                "",
+                other
+            )
         );
+
+        var balance = accountBalanceService.getBalance(owner, "EUR");
+
+        assertEquals("EUR", balance.currencyCode());
 
         assertEquals(
             0,
-            new BigDecimal("75.00").compareTo(
-                accountService.getTotalBalance(owner)
-            )
+            new BigDecimal("75.00").compareTo(balance.amount())
         );
     }
 
@@ -289,9 +312,13 @@ class PostgresApiIntegrationTest {
         owner.setRoles(Set.of());
         owner = userRepository.saveAndFlush(owner);
 
+        var balance = accountBalanceService.getBalance(owner, "EUR");
+
+        assertEquals("EUR", balance.currencyCode());
+
         assertEquals(
             0,
-            BigDecimal.ZERO.compareTo(accountService.getTotalBalance(owner))
+            BigDecimal.ZERO.compareTo(balance.amount())
         );
     }
 

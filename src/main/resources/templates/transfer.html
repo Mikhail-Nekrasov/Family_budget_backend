@@ -14,46 +14,58 @@
 
         <!-- Errors -->
         <div th:if="${error == 'same'}" class="alert alert-danger">
-            You cannot transfer money to the same account.
+            You cannot transfer money to the same account
         </div>
 
         <div th:if="${error == 'invalid'}" class="alert alert-danger">
-            Amount must be greater than zero.
+            Amount must be greater than zero and have at most two decimal places
         </div>
 
         <div th:if="${error == 'nomoney'}" class="alert alert-danger">
-            Not enough funds in the source account.
+            Not enough funds in the source account
+        </div>
+
+        <div th:if="${error == 'target'}" class="alert alert-danger">
+            Destination amount must be positive, have at most two decimal places
+            and equal the source amount for same-currency transfers
+        </div>
+
+        <div th:if="${error == 'currency'}" class="alert alert-danger">
+            Enter the destination amount for a transfer between different currencies
         </div>
 
         <form th:action="@{/transfer}" method="post">
 
             <!-- FROM -->
             <div class="mb-3">
-                <label class="form-label">From account</label>
-                <select class="form-select" name="fromId" required>
-                    <option th:each="acc : ${accounts}"
-                            th:value="${acc.account_id}"
-                            th:text="|${acc.name} (Balance: ${balances[acc.account_id]})|">
+                <label class="form-label" for="fromId">From account</label>
+                <select id="fromId" class="form-select" name="fromId" required>
+                    <option
+                        th:each="acc : ${accounts}"
+                        th:value="${acc.account_id}"
+                        th:text="|${acc.name} (${acc.currencyCode}, Balance: ${balances[acc.account_id]})|">
                     </option>
                 </select>
             </div>
 
             <!-- TO -->
             <div class="mb-3">
-                <label class="form-label">To account</label>
-                <select class="form-select" name="toId" required>
+                <label class="form-label" for="toId">To account</label>
+                <select id="toId" class="form-select" name="toId" required>
 
                     <!-- Preselected destination -->
-                    <option th:value="${toAccount.account_id}"
-                            th:text="|${toAccount.name} (Balance: ${balances[toAccount.account_id]})|"
-                            selected>
+                    <option
+                        th:value="${toAccount.account_id}"
+                        th:text="|${toAccount.name} (${toAccount.currencyCode}, Balance: ${balances[toAccount.account_id]})|"
+                        selected>
                     </option>
 
                     <!-- Other accounts -->
-                    <option th:each="acc : ${accounts}"
-                            th:if="${acc.account_id} != ${toAccount.account_id}"
-                            th:value="${acc.account_id}"
-                            th:text="|${acc.name} (Balance: ${balances[acc.account_id]})|">
+                    <option
+                        th:each="acc : ${accounts}"
+                        th:if="${acc.account_id != toAccount.account_id}"
+                        th:value="${acc.account_id}"
+                        th:text="|${acc.name} (${acc.currencyCode}, Balance: ${balances[acc.account_id]})|">
                     </option>
 
                 </select>
@@ -61,27 +73,95 @@
 
             <!-- AMOUNT -->
             <div class="mb-3">
-                <label class="form-label">Amount</label>
-                <input type="number"
-                       class="form-control"
-                       name="amount"
-                       min="0.01"
-                       step="0.01"
-                       required>
+                <label class="form-label" for="amount">Amount to debit</label>
+                <input
+                    type="number"
+                    id="amount"
+                    class="form-control"
+                    name="amount"
+                    min="0.01"
+                    step="0.01"
+                    required>
+            </div>
+
+            <!-- DESTINATION AMOUNT -->
+            <div class="mb-3">
+                <label class="form-label" for="targetAmount">
+                    Amount to credit
+                </label>
+                <input
+                    type="number"
+                    id="targetAmount"
+                    class="form-control"
+                    name="targetAmount"
+                    min="0.01"
+                    step="0.01">
+                <div class="form-text">
+                    Enter the amount in the destination account's currency.
+                    Required for different currencies; otherwise leave empty
+                    to credit the same amount.
+                </div>
             </div>
 
             <!-- DESCRIPTION -->
             <div class="mb-3">
-                <label class="form-label">Description (optional)</label>
-                <input type="text" class="form-control" name="description">
+                <label class="form-label" for="description">
+                    Description (optional)
+                </label>
+                <input
+                    type="text"
+                    id="description"
+                    class="form-control"
+                    name="description">
             </div>
 
-            <button type="submit" class="btn btn-primary">Transfer money</button>
-            <a href="/accounts" class="btn btn-secondary ms-2">Back to Accounts</a>
+            <button type="submit" class="btn btn-primary">
+                Transfer money
+            </button>
+            <a th:href="@{/accounts}" class="btn btn-secondary ms-2">
+                Back to Accounts
+            </a>
 
         </form>
     </div>
 </div>
+
+<script>
+    const fromSelect = document.getElementById('fromId');
+    const toSelect = document.getElementById('toId');
+    const submitButton = document.querySelector(
+        'button[type="submit"]'
+    );
+
+    function updateAccountOptions() {
+        for (const option of fromSelect.options) {
+            option.disabled = option.value === toSelect.value;
+        }
+
+        for (const option of toSelect.options) {
+            option.disabled = option.value === fromSelect.value;
+        }
+
+        submitButton.disabled =
+            !fromSelect.value ||
+            !toSelect.value ||
+            fromSelect.value === toSelect.value;
+    }
+
+    // Preserve the destination chosen on the Accounts page
+    if (fromSelect.value === toSelect.value) {
+        const otherAccount = Array.from(fromSelect.options).find(
+            (option) => option.value !== toSelect.value
+        );
+
+        fromSelect.value = otherAccount?.value ?? '';
+    }
+
+    fromSelect.addEventListener('change', updateAccountOptions);
+    toSelect.addEventListener('change', updateAccountOptions);
+
+    updateAccountOptions();
+</script>
 
 </body>
 </html>

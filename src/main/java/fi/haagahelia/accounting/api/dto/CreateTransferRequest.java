@@ -8,6 +8,7 @@ public record CreateTransferRequest(
     Long toAccountId,
     BigDecimal amount,
     String description,
-    UUID syncId
+    UUID syncId,
+    BigDecimal targetAmount
 ) {
 }

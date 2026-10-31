@@ -1,6 +1,7 @@
 package fi.haagahelia.accounting.model;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -32,11 +33,20 @@ public class Account {
     private BigDecimal amount;
     private String description;
 
+    @Column(name = "currency_code", nullable = false, length = 3)
+    private String currencyCode = "EUR";
+
+    @Column(name = "icon_key", nullable = false, length = 64)
+    private String iconKey = "cash";
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
     @Version
     private Long version;
 
     @OneToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, mappedBy = "account")
-    private List<Entry> entries;
+    private List<Entry> entries = new ArrayList<>();
 
     @OneToMany(mappedBy = "fromAccount")
     private List<Transfer> fromTransfers = new ArrayList<>();
@@ -139,6 +149,30 @@ public class Account {
         }
 
         this.syncId = syncId;
+    }
+
+    public String getCurrencyCode() {
+        return currencyCode;
+    }
+
+    public void setCurrencyCode(String currencyCode) {
+        this.currencyCode = currencyCode;
+    }
+
+    public String getIconKey() {
+        return iconKey;
+    }
+
+    public void setIconKey(String iconKey) {
+        this.iconKey = iconKey;
+    }
+
+    public Instant getArchivedAt() {
+        return archivedAt;
+    }
+
+    public void setArchivedAt(Instant archivedAt) {
+        this.archivedAt = archivedAt;
     }
 
     @Override

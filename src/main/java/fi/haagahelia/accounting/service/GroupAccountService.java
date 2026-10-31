@@ -108,7 +108,10 @@ public class GroupAccountService {
             account.getName(),
             account.getAmount(),
             account.getUser().getId(),
-            access.getPermission()
+            access.getPermission(),
+            account.getCurrencyCode(),
+            account.getIconKey(),
+            account.getArchivedAt()
         );
     }
 
@@ -142,7 +145,10 @@ public class GroupAccountService {
                     account.getName(),
                     account.getAmount(),
                     account.getUser().getId(),
-                    access.getPermission()
+                    access.getPermission(),
+                    account.getCurrencyCode(),
+                    account.getIconKey(),
+                    account.getArchivedAt()
                 );
             })
             .toList();

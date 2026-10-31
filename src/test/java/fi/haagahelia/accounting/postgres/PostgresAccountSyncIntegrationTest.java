@@ -13,6 +13,8 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -79,7 +81,9 @@ class PostgresAccountSyncIntegrationTest {
             "Cash",
             new BigDecimal("100.00"),
             "Personal account",
-            syncId
+            syncId,
+            null,
+            null
         );
 
         CompletedCommand first = accountSyncService.createAccount(
@@ -91,7 +95,9 @@ class PostgresAccountSyncIntegrationTest {
             "Cash",
             new BigDecimal("100.0"),
             "Personal account",
-            syncId
+            syncId,
+            null,
+            null
         );
 
         CompletedCommand repeated = accountSyncService.createAccount(
@@ -138,7 +144,9 @@ class PostgresAccountSyncIntegrationTest {
                 "Cash",
                 BigDecimal.ZERO,
                 "",
-                syncId
+                syncId,
+                null,
+                null
             ),
             owner
         );
@@ -151,7 +159,9 @@ class PostgresAccountSyncIntegrationTest {
                     "Changed name",
                     BigDecimal.ZERO,
                     "",
-                    syncId
+                    syncId,
+                    null,
+                    null
                 ),
                 owner
             )
@@ -337,7 +347,8 @@ class PostgresAccountSyncIntegrationTest {
                 "syncId": "%s",
                 "expectedVersion": %d,
                 "name": "Renamed account",
-                "description": "Updated description"
+                "description": "Updated description",
+                "iconKey": "travel-fund"
             }
             """.formatted(
                 account.getSyncId(),
@@ -355,6 +366,7 @@ class PostgresAccountSyncIntegrationTest {
             .andExpect(jsonPath("$.syncId")
                 .value(account.getSyncId().toString()))
             .andExpect(jsonPath("$.name").value("Renamed account"))
+            .andExpect(jsonPath("$.iconKey").value("travel-fund"))
             .andExpect(jsonPath("$.description")
                 .value("Updated description"))
             .andExpect(jsonPath("$.amount").value(100))
@@ -374,6 +386,21 @@ class PostgresAccountSyncIntegrationTest {
             )
             .andExpect(status().isOk())
             .andExpect(content().string(firstResponse));
+
+        // The same command ID cannot be reused with another icon.
+        String changedRequestBody = requestBody.replace(
+            "\"iconKey\": \"travel-fund\"",
+            "\"iconKey\": \"savings\""
+        );
+
+        mockMvc.perform(
+                put("/api/sync/accounts/{commandId}", commandId)
+                    .with(user(owner.getUsername()))
+                    .with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(changedRequestBody)
+            )
+            .andExpect(status().isConflict());
 
         // A new command cannot use the outdated version.
         UUID staleCommandId = UUID.randomUUID();
@@ -399,6 +426,7 @@ class PostgresAccountSyncIntegrationTest {
         assertEquals(account.getAccount_id(), updated.getAccount_id());
         assertEquals("Renamed account", updated.getName());
         assertEquals("Updated description", updated.getDescription());
+        assertEquals("travel-fund", updated.getIconKey());
         assertEquals(
             originalVersion.longValue() + 1,
             updated.getVersion().longValue()
@@ -434,6 +462,107 @@ class PostgresAccountSyncIntegrationTest {
                 owner.getId(),
                 staleCommandId
             )
+        );
+    }
+
+    @Test
+    void updatingAccountWithoutIconKeyPreservesExistingIcon() throws Exception {
+        Account account = new Account(
+            "Cash",
+            new BigDecimal("100.00"),
+            "",
+            owner
+        );
+        account.setIconKey("travel-fund");
+        account = accountRepository.saveAndFlush(account);
+
+        String requestBody = """
+            {
+                "syncId": "%s",
+                "expectedVersion": %d,
+                "name": "Renamed account",
+                "description": ""
+            }
+            """.formatted(
+                account.getSyncId(),
+                account.getVersion()
+            );
+
+        mockMvc.perform(
+                put("/api/sync/accounts/{commandId}", UUID.randomUUID())
+                    .with(user(owner.getUsername()))
+                    .with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(requestBody)
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Renamed account"))
+            .andExpect(jsonPath("$.iconKey").value("travel-fund"));
+
+        Account updated = accountRepository
+            .findById(account.getAccount_id())
+            .orElseThrow();
+
+        assertEquals("travel-fund", updated.getIconKey());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 65})
+    void rejectsInvalidIconKeyWithoutChangingAccount(int length)
+            throws Exception {
+
+        Account account = new Account(
+            "Original account",
+            new BigDecimal("100.00"),
+            "Original description",
+            owner
+        );
+        account.setIconKey("card");
+        account = accountRepository.saveAndFlush(account);
+
+        Long originalVersion = account.getVersion();
+
+        String iconKey = length == 1
+            ? " "
+            : "x".repeat(length);
+
+        String requestBody = """
+            {
+                "syncId": "%s",
+                "expectedVersion": %d,
+                "name": "Changed account",
+                "description": "Changed description",
+                "iconKey": "%s"
+            }
+            """.formatted(
+                account.getSyncId(),
+                originalVersion,
+                iconKey
+            );
+
+        mockMvc.perform(
+                put("/api/sync/accounts/{commandId}", UUID.randomUUID())
+                    .with(user(owner.getUsername()))
+                    .with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(requestBody)
+            )
+            .andExpect(status().isBadRequest());
+
+        Account unchanged = accountRepository
+            .findById(account.getAccount_id())
+            .orElseThrow();
+
+        assertEquals("Original account", unchanged.getName());
+        assertEquals(
+            "Original description",
+            unchanged.getDescription()
+        );
+        assertEquals("card", unchanged.getIconKey());
+        assertEquals(originalVersion, unchanged.getVersion());
+        assertEquals(
+            0,
+            new BigDecimal("100.00").compareTo(unchanged.getAmount())
         );
     }
 
@@ -577,7 +706,9 @@ class PostgresAccountSyncIntegrationTest {
                     "Restored from an old phone",
                     BigDecimal.ZERO,
                     "",
-                    syncId
+                    syncId,
+                    null,
+                    null
                 ),
                 owner
             )

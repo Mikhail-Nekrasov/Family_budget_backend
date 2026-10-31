@@ -212,4 +212,72 @@ class TransferServiceTest {
         verify(accountRepository).save(to);
         verify(transferRepository).save(any(Transfer.class));
     }
+
+    @Test
+    void convertsTransferUsingExplicitDestinationAmount() {
+        mockAccounts();
+
+        from.setCurrencyCode("EUR");
+        to.setCurrencyCode("USD");
+
+        TransferResult result = transferService.executeTransferWithAmounts(
+            10L,
+            20L,
+            new BigDecimal("100.00"),
+            new BigDecimal("108.50"),
+            "Conversion",
+            user,
+            null
+        );
+
+        assertEquals(TransferResult.SUCCESS, result);
+        assertEquals(
+            0,
+            new BigDecimal("900.00").compareTo(from.getAmount())
+        );
+        assertEquals(
+            0,
+            new BigDecimal("608.50").compareTo(to.getAmount())
+        );
+
+        ArgumentCaptor<Transfer> captor =
+            ArgumentCaptor.forClass(Transfer.class);
+
+        verify(transferRepository).save(captor.capture());
+
+        Transfer saved = captor.getValue();
+
+        assertEquals(
+            0,
+            new BigDecimal("100.00").compareTo(saved.getAmount())
+        );
+        assertEquals(
+            0,
+            new BigDecimal("108.50").compareTo(saved.getTargetAmount())
+        );
+        assertEquals("EUR", saved.getSourceCurrencyCode());
+        assertEquals("USD", saved.getTargetCurrencyCode());
+    }
+
+    @Test
+    void rejectsDifferentAmountsForSameCurrency() {
+        mockAccounts();
+
+        from.setCurrencyCode("EUR");
+        to.setCurrencyCode("EUR");
+
+        TransferResult result = transferService.executeTransferWithAmounts(
+            10L,
+            20L,
+            new BigDecimal("100.00"),
+            new BigDecimal("90.00"),
+            "Invalid transfer",
+            user,
+            null
+        );
+
+        assertEquals(TransferResult.INVALID_TARGET_AMOUNT, result);
+        assertNoChanges();
+        verifyNoInteractions(transferRepository);
+    }
 }

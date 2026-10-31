@@ -8,6 +8,7 @@ import fi.haagahelia.accounting.repository.TransferRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.TransferService;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -72,11 +73,14 @@ public class TransferController {
     }
 
     @PostMapping("/transfer")
-    public String executeTransfer(@RequestParam Long fromId,
-                                @RequestParam Long toId,
-                                @RequestParam BigDecimal amount,
-                                @RequestParam(required = false) String description,
-                                Authentication auth) {
+    public String executeTransfer(
+            @RequestParam Long fromId,
+            @RequestParam Long toId,
+            @RequestParam BigDecimal amount,
+            @RequestParam(required = false) String description,
+            Authentication auth,
+            @RequestParam(value = "targetAmount", required = false)
+            @Nullable BigDecimal targetAmount) {
 
         User currentUser = userRepository.findByUsername(auth.getName());
 
@@ -84,16 +88,38 @@ public class TransferController {
             throw new IllegalArgumentException("User not found");
         }
 
-        TransferService.TransferResult result = transferService.executeTransfer(
-            fromId, toId, amount, description, currentUser
-        );
+        TransferService.TransferResult result =
+            transferService.executeTransferWithAmounts(
+                fromId,
+                toId,
+                amount,
+                targetAmount,
+                description,
+                currentUser,
+                null
+            );
 
         return switch (result) {
-            case SUCCESS -> "redirect:/transfers";
-            case INVALID_ACCOUNTS -> "redirect:/accounts";
-            case SAME_ACCOUNT -> "redirect:/transfer/" + toId + "?error=same";
-            case INVALID_AMOUNT -> "redirect:/transfer/" + toId + "?error=invalid";
-            case INSUFFICIENT_FUNDS -> "redirect:/transfer/" + toId + "?error=nomoney";
+            case SUCCESS ->
+                "redirect:/transfers";
+
+            case INVALID_ACCOUNTS ->
+                "redirect:/accounts";
+
+            case SAME_ACCOUNT ->
+                "redirect:/transfer/" + toId + "?error=same";
+
+            case DIFFERENT_CURRENCIES ->
+                "redirect:/transfer/" + toId + "?error=currency";
+
+            case INVALID_AMOUNT ->
+                "redirect:/transfer/" + toId + "?error=invalid";
+
+            case INVALID_TARGET_AMOUNT ->
+                "redirect:/transfer/" + toId + "?error=target";
+
+            case INSUFFICIENT_FUNDS ->
+                "redirect:/transfer/" + toId + "?error=nomoney";
         };
     }
 
