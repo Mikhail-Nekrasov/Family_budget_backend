@@ -13,6 +13,9 @@ public record TransferResponse(
     BigDecimal amount,
     LocalDateTime dateTime,
     String description,
-    UUID syncId
+    UUID syncId,
+    BigDecimal targetAmount,
+    String sourceCurrencyCode,
+    String targetCurrencyCode
 ) {
 }

@@ -24,6 +24,7 @@ import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.EntryService;
+import fi.haagahelia.accounting.service.EntrySummaryService;
 
 @RestController
 @RequestMapping("/api/entries")
@@ -31,11 +32,16 @@ public class EntryRestController {
 
     private final EntryService entryService;
     private final UserRepository userRepository;
+    private final EntrySummaryService entrySummaryService;
 
-    public EntryRestController(EntryService entryService,
-                               UserRepository userRepository) {
+    public EntryRestController(
+            EntryService entryService,
+            UserRepository userRepository,
+            EntrySummaryService entrySummaryService) {
+
         this.entryService = entryService;
         this.userRepository = userRepository;
+        this.entrySummaryService = entrySummaryService;
     }
 
     @GetMapping
@@ -128,8 +134,14 @@ public class EntryRestController {
     }
 
     @GetMapping("/summary")
-    public EntrySummaryResponse getSummary(Authentication auth) {
-        User currentUser = userRepository.findByUsername(auth.getName());
+    public EntrySummaryResponse getSummary(
+            @RequestParam(value = "currency", defaultValue = "EUR")
+            String currency,
+            Authentication auth) {
+
+        User currentUser = userRepository.findByUsername(
+            auth.getName()
+        );
 
         if (currentUser == null) {
             throw new ResponseStatusException(
@@ -138,6 +150,9 @@ public class EntryRestController {
             );
         }
 
-        return entryService.getSummary(currentUser);
+        return entrySummaryService.getSummary(
+            currentUser,
+            currency
+        );
     }
 }

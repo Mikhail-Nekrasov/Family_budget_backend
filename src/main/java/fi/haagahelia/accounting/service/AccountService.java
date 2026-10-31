@@ -1,6 +1,7 @@
 package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
+import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,44 @@ public class AccountService {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Account name is required"
+            );
+        }
+
+        String currencyCode = account.getCurrencyCode();
+
+        if (currencyCode == null || !currencyCode.matches("[A-Z]{3}")) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "A three-letter currency code is required"
+            );
+        }
+
+        Currency currency;
+
+        try {
+            currency = Currency.getInstance(currencyCode);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Unknown currency code"
+            );
+        }
+
+        if (currency.getDefaultFractionDigits() != 2) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Only currencies with two decimal places are currently supported"
+            );
+        }
+
+        String iconKey = account.getIconKey();
+
+        if (iconKey == null
+                || iconKey.isBlank()
+                || iconKey.length() > 64) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Icon key must contain between 1 and 64 characters"
             );
         }
 
@@ -122,7 +161,10 @@ public class AccountService {
                 account.getAmount(),
                 account.getDescription(),
                 account.getSyncId(),
-                account.getVersion()
+                account.getVersion(),
+                account.getCurrencyCode(),
+                account.getIconKey(),
+                account.getArchivedAt()
             ))
             .toList();
     }
@@ -137,12 +179,5 @@ public class AccountService {
         }
 
         return spent;
-    }
-
-    @Transactional(readOnly = true)
-    public BigDecimal getTotalBalance(User currentUser) {
-        BigDecimal total = accountRepository.sumAmountByUser(currentUser);
-
-        return total != null ? total : BigDecimal.ZERO;
     }
 }

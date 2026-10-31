@@ -10,6 +10,7 @@ public record SyncCreateTransferRequest(
     UUID toAccountSyncId,
     BigDecimal amount,
     LocalDateTime dateTime,
-    String description
+    String description,
+    BigDecimal targetAmount
 ) {
 }

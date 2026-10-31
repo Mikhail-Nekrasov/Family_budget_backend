@@ -17,7 +17,8 @@
                     <tr>
                         <th>From</th>
                         <th>To</th>
-                        <th>Amount</th>
+                        <th>Debited</th>
+                        <th>Credited</th>
                         <th>Date</th>
                         <th>Description</th>
                     </tr>
@@ -26,7 +27,8 @@
                     <tr th:each="t : ${transfers}">
                         <td th:text="${t.fromAccount.name}"></td>
                         <td th:text="${t.toAccount.name}"></td>
-                        <td th:text="${t.amount}"></td>
+                        <td th:text="|${t.amount} ${t.sourceCurrencyCode}|"></td>
+                        <td th:text="|${t.targetAmount} ${t.targetCurrencyCode}|"></td>
                         <td th:text="${#temporals.format(t.dateTime, 'yyyy-MM-dd HH:mm')}"></td>
                         <td th:text="${t.description}"></td>
                     </tr>

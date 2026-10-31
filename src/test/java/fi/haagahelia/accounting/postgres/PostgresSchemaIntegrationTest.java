@@ -88,9 +88,15 @@ class PostgresSchemaIntegrationTest {
             () -> jdbcTemplate.update(
                 """
                 INSERT INTO transfer (
-                    from_account_id, to_account_id, amount, date_time
+                    from_account_id,
+                    to_account_id,
+                    amount,
+                    target_amount,
+                    source_currency_code,
+                    target_currency_code,
+                    date_time
                 )
-                VALUES (?, ?, 10, CURRENT_TIMESTAMP)
+                VALUES (?, ?, 10, 10, 'EUR', 'EUR', CURRENT_TIMESTAMP)
                 """,
                 accountId,
                 accountId

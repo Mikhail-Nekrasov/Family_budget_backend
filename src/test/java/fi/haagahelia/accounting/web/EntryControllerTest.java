@@ -26,7 +26,7 @@ import org.springframework.ui.Model;
 import org.springframework.security.core.Authentication;
 
 import jakarta.servlet.http.HttpSession;
-
+import fi.haagahelia.accounting.api.dto.EntrySummaryResponse;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.Entry;
@@ -40,6 +40,7 @@ import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
 import fi.haagahelia.accounting.service.AccountAccessService;
 import fi.haagahelia.accounting.service.EntryService;
+import fi.haagahelia.accounting.service.EntrySummaryService;
 
 public class EntryControllerTest {
 
@@ -63,6 +64,9 @@ public class EntryControllerTest {
 
     @Mock
     private HttpSession session;
+
+    @Mock
+    private EntrySummaryService entrySummaryService;
 
     private EntryController entryController;
 
@@ -90,7 +94,8 @@ public class EntryControllerTest {
             categoryRepository,
             accountRepository,
             userRepository,
-            entryService
+            entryService,
+            entrySummaryService
         );
 
         // Set up test user
@@ -144,22 +149,42 @@ public class EntryControllerTest {
 
     @Test
     public void testGetEntriesReturnsCorrectView() {
-        // Mock repository to return a page with the test entry
         Page<Entry> page = new PageImpl<>(List.of(testEntry));
-        when(entryRepository.findByUser(eq(testUser), any(Pageable.class))).thenReturn(page);
-        when(entryRepository.sumAmountByUserAndType(
-                testUser, EntryType.INCOME))
-            .thenReturn(new BigDecimal("500.00"));
 
-        when(entryRepository.sumAmountByUserAndType(
-                testUser, EntryType.EXPENSE))
-            .thenReturn(new BigDecimal("150.00"));
-        
-        String view = entryController.getEntries(null, 0, 5, model, auth);
+        when(entryRepository.findByUser(
+            eq(testUser),
+            any(Pageable.class)
+        )).thenReturn(page);
+
+        when(entrySummaryService.getSummary(
+            testUser,
+            "EUR"
+        )).thenReturn(new EntrySummaryResponse(
+            new BigDecimal("500.00"),
+            new BigDecimal("150.00"),
+            new BigDecimal("350.00"),
+            "EUR"
+        ));
+
+        String view = entryController.getEntries(
+            null,
+            0,
+            5,
+            model,
+            auth,
+            "EUR"
+        );
+
         assertEquals("entries", view);
+
         verify(model).addAttribute(eq("entries"), anyList());
-        verify(model).addAttribute(eq("pageTitle"), eq("All entries"));
-        verify(model).addAttribute("total", new BigDecimal("350.00"));
+        verify(model).addAttribute("pageTitle", "All entries");
+        verify(model).addAttribute(
+            "total",
+            new BigDecimal("350.00")
+        );
+        verify(model).addAttribute("currencyCode", "EUR");
+
         verify(entryRepository, never()).findByUser(testUser);
     }
 

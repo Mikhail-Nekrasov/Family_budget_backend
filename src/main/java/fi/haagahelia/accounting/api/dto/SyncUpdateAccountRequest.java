@@ -6,6 +6,7 @@ public record SyncUpdateAccountRequest(
     UUID syncId,
     Long expectedVersion,
     String name,
-    String description
+    String description,
+    String iconKey
 ) {
 }

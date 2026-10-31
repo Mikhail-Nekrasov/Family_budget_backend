@@ -130,7 +130,8 @@ class PostgresTransferSyncTransactionIntegrationTest {
                 destination.getSyncId(),
                 new BigDecimal("75.00"),
                 clientDate,
-                "Concurrent transfer"
+                "Concurrent transfer",
+                null
             );
 
         ExecutorService executor = Executors.newFixedThreadPool(2);

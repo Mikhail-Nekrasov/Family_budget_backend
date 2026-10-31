@@ -1,6 +1,5 @@
 package fi.haagahelia.accounting.repository;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,15 +33,6 @@ public interface EntryRepository extends JpaRepository<Entry, Long> {
     Page<Entry> findByUserAndType(User currentUser, EntryType type, Pageable pageable);
     List<Entry> findByUserAndType(User currentUser, EntryType type);
 
-    @Query("""
-        SELECT SUM(e.amount)
-        FROM Entry e
-        WHERE e.user = :user AND e.type = :type
-        """)
-    BigDecimal sumAmountByUserAndType(
-        @Param("user") User user,
-        @Param("type") EntryType type
-    );
 
     @Query("""
         SELECT e.account.account_id AS accountId, SUM(e.amount) AS total

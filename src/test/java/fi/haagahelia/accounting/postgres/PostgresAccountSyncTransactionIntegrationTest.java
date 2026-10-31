@@ -91,7 +91,9 @@ class PostgresAccountSyncTransactionIntegrationTest {
             "Committed account",
             new BigDecimal("100.00"),
             "",
-            UUID.randomUUID()
+            UUID.randomUUID(),
+            null,
+            null
         );
 
         // The service opens and commits its own transaction.
@@ -130,7 +132,9 @@ class PostgresAccountSyncTransactionIntegrationTest {
             "Rolled back account",
             BigDecimal.ZERO,
             "",
-            UUID.randomUUID()
+            UUID.randomUUID(),
+            null,
+            null
         );
 
         TransactionTemplate transaction =
@@ -197,7 +201,9 @@ class PostgresAccountSyncTransactionIntegrationTest {
             "Concurrent account",
             new BigDecimal("100.00"),
             "",
-            syncId
+            syncId,
+            null,
+            null
         );
 
         ExecutorService executor = Executors.newFixedThreadPool(2);

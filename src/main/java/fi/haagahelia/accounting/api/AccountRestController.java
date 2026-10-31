@@ -69,6 +69,9 @@ public class AccountRestController {
             currentUser
         );
 
+        account.setCurrencyCode(request.currencyCode());
+        account.setIconKey(request.iconKey());
+
         if (request.syncId() != null) {
             account.assignSyncId(request.syncId());
         }
@@ -81,7 +84,10 @@ public class AccountRestController {
             saved.getAmount(),
             saved.getDescription(),
             saved.getSyncId(),
-            saved.getVersion()
+            saved.getVersion(),
+            saved.getCurrencyCode(),
+            saved.getIconKey(),
+            saved.getArchivedAt()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);

@@ -267,6 +267,133 @@ class PostgresSyncDownloadIntegrationTest {
     }
 
     @Test
+    void httpDownloadIncludesAccountMetadataAndConvertedTransfer() throws Exception {
+        account.setCurrencyCode("EUR");
+        account.setIconKey("travel-fund");
+        accounts.saveAndFlush(account);
+
+        Account destination = new Account(
+            "Dollar account",
+            new BigDecimal("50.00"),
+            "",
+            owner
+        );
+        destination.setCurrencyCode("USD");
+        destination.setIconKey("card");
+        destination = accounts.saveAndFlush(destination);
+
+        UUID transferSyncId = UUID.randomUUID();
+
+        jdbc.update(
+            """
+            INSERT INTO transfer (
+                sync_id,
+                from_account_id,
+                to_account_id,
+                amount,
+                target_amount,
+                source_currency_code,
+                target_currency_code,
+                date_time,
+                description
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, LOCALTIMESTAMP, ?)
+            """,
+            transferSyncId,
+            account.getAccount_id(),
+            destination.getAccount_id(),
+            new BigDecimal("10.00"),
+            new BigDecimal("10.85"),
+            "EUR",
+            "USD",
+            "Conversion fixture"
+        );
+
+        UUID baseline = downloads.start(null, owner).downloadId();
+
+        String accountPath =
+            "$.items[?(@.syncId == '" + account.getSyncId() + "')].data";
+
+        String transferPath =
+            "$.items[?(@.syncId == '" + transferSyncId + "')].data";
+
+        mockMvc.perform(
+                get("/api/sync/downloads/{id}", baseline)
+                    .with(user(owner.getUsername()))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath(
+                accountPath + ".currencyCode",
+                org.hamcrest.Matchers.hasItem("EUR")
+            ))
+            .andExpect(jsonPath(
+                accountPath + ".iconKey",
+                org.hamcrest.Matchers.hasItem("travel-fund")
+            ))
+            .andExpect(jsonPath(
+                transferPath + ".amount",
+                org.hamcrest.Matchers.hasItem(10.0)
+            ))
+            .andExpect(jsonPath(
+                transferPath + ".targetAmount",
+                org.hamcrest.Matchers.hasItem(10.85)
+            ))
+            .andExpect(jsonPath(
+                transferPath + ".sourceCurrencyCode",
+                org.hamcrest.Matchers.hasItem("EUR")
+            ))
+            .andExpect(jsonPath(
+                transferPath + ".targetCurrencyCode",
+                org.hamcrest.Matchers.hasItem("USD")
+            ));
+
+        jdbc.update(
+            """
+            UPDATE account
+            SET icon_key = ?,
+                archived_at = CURRENT_TIMESTAMP,
+                version = version + 1
+            WHERE account_id = ?
+            """,
+            "savings",
+            account.getAccount_id()
+        );
+
+        UUID delta = downloads.start(baseline, owner).downloadId();
+
+        mockMvc.perform(
+                get("/api/sync/downloads/{id}", delta)
+                    .with(user(owner.getUsername()))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath(
+                accountPath + ".iconKey",
+                org.hamcrest.Matchers.hasItem("savings")
+            ))
+            .andExpect(jsonPath(
+                accountPath + ".currencyCode",
+                org.hamcrest.Matchers.hasItem("EUR")
+            ))
+            .andExpect(jsonPath(
+                accountPath + ".archivedAt",
+                org.hamcrest.Matchers.hasItem(
+                    org.hamcrest.Matchers.notNullValue()
+                )
+            ));
+
+        // Previously created pages must retain their original payload.
+        mockMvc.perform(
+                get("/api/sync/downloads/{id}", baseline)
+                    .with(user(owner.getUsername()))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath(
+                accountPath + ".iconKey",
+                org.hamcrest.Matchers.hasItem("travel-fund")
+            ));
+    }
+
+    @Test
     void cleanupKeepsOldChangesNotYetVisibleToActiveCursor() {
         UUID baseline = downloads.start(null, owner).downloadId();
         jdbc.update("UPDATE account SET name = 'Keep this delta', version = version + 1 WHERE account_id = ?", account.getAccount_id());
@@ -300,8 +427,18 @@ class PostgresSyncDownloadIntegrationTest {
     void crossUserTransferIncludesLabelsButNotCounterpartyBalanceAndRenameIsPublished() {
         var foreign = accounts.findByUser(other).get(0);
         UUID transferId = jdbc.queryForObject("""
-            INSERT INTO transfer(from_account_id, to_account_id, amount, date_time, description)
-            VALUES (?, ?, 1, LOCALTIMESTAMP, '') RETURNING sync_id
+            INSERT INTO transfer (
+                from_account_id,
+                to_account_id,
+                amount,
+                target_amount,
+                source_currency_code,
+                target_currency_code,
+                date_time,
+                description
+            )
+            VALUES (?, ?, 1, 1, 'EUR', 'EUR', LOCALTIMESTAMP, '')
+            RETURNING sync_id
             """, UUID.class, account.getAccount_id(), foreign.getAccount_id());
         UUID baseline = downloads.start(null, owner).downloadId();
         var items = all(baseline);

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.CreateAccountRequest;
+import fi.haagahelia.accounting.api.dto.SyncAccountArchiveRequest;
 import fi.haagahelia.accounting.api.dto.SyncDeleteAccountRequest;
 import fi.haagahelia.accounting.api.dto.SyncUpdateAccountRequest;
 import fi.haagahelia.accounting.model.User;
@@ -83,6 +84,35 @@ public class AccountSyncRestController {
 
         CompletedCommand result = accountSyncService.updateAccount(
             commandId, request, currentUser
+        );
+
+        return ResponseEntity
+            .status(result.responseStatus())
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(result.responseBody());
+    }
+
+    @PostMapping("/archive-state")
+    public ResponseEntity<String> changeArchiveState(
+            @PathVariable("commandId") UUID commandId,
+            @RequestBody SyncAccountArchiveRequest request,
+            Authentication auth) {
+
+        User currentUser = userRepository.findByUsername(
+            auth.getName()
+        );
+
+        if (currentUser == null) {
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED,
+                "User not found"
+            );
+        }
+
+        CompletedCommand result = accountSyncService.changeArchiveState(
+            commandId,
+            request,
+            currentUser
         );
 
         return ResponseEntity

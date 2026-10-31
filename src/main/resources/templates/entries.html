@@ -52,20 +52,52 @@
 
         <h3 th:text="${pageTitle}"></h3>
 
-        <div th:if="${total != null}" class="alert fw-bold" th:switch="${type?.name()}">
-            <span th:case="null" class="alert alert-primary d-flex justify-content-between align-items-center">
-                <span>Total: <span th:text="${total}"></span></span>
-            </span>
+        <div th:if="${totalUnavailable}" class="alert alert-warning">
+            Historical totals are temporarily unavailable
+        </div>
 
-            <span th:case="'INCOME'" class="alert alert-success d-flex justify-content-between align-items-center">
-                <span>Total incomes: <span th:text="${total}"></span></span>
-                <a th:href="@{/addentry(type=INCOME)}" class="btn btn-info btn-sm">Add new income</a>
-            </span>
+        <div class="alert fw-bold" th:switch="${type?.name()}">
+            <div
+                th:case="null"
+                class="alert alert-primary">
 
-            <span th:case="'EXPENSE'" class="alert alert-danger d-flex justify-content-between align-items-center">
-                <span>Total expenses: <span th:text="'-' + ${total}"></span></span>
-                <a th:href="@{/addentry(type=EXPENSE)}" class="btn btn-info btn-sm">Add new expense</a>
-            </span>
+                <span
+                    th:unless="${totalUnavailable}"
+                    th:text="|Total: ${total} ${currencyCode}|">
+                </span>
+            </div>
+
+            <div
+                th:case="'INCOME'"
+                class="alert alert-success d-flex justify-content-between align-items-center">
+
+                <span
+                    th:unless="${totalUnavailable}"
+                    th:text="|Total incomes: ${total} ${currencyCode}|">
+                </span>
+
+                <a
+                    th:href="@{/addentry(type=INCOME)}"
+                    class="btn btn-info btn-sm">
+                    Add new income
+                </a>
+            </div>
+
+            <div
+                th:case="'EXPENSE'"
+                class="alert alert-danger d-flex justify-content-between align-items-center">
+
+                <span
+                    th:unless="${totalUnavailable}"
+                    th:text="|Total expenses: -${total} ${currencyCode}|">
+                </span>
+
+                <a
+                    th:href="@{/addentry(type=EXPENSE)}"
+                    class="btn btn-info btn-sm">
+                    Add new expense
+                </a>
+            </div>
         </div>
 
         <table class="table table-striped">
@@ -86,7 +118,7 @@
             <tr th:each="entry : ${entries}">
                 <td class="col-title" th:text="${entry.title}"></td>
                 <td th:if="${type} == null" th:text="${entry.type}"></td>
-                <td th:text="${entry.amount}"></td>
+                <td th:text="|${entry.amount} ${entry.account.currencyCode}|"></td>
                 <td th:text="${entry.formattedDateTime}"></td>
                 <td th:text="${entry.category}"></td>
                 <td th:text="${entry.account}"></td>

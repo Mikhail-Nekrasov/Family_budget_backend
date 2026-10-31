@@ -26,6 +26,7 @@ import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
 import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.UserRepository;
+import fi.haagahelia.accounting.service.AccountBalanceService;
 import fi.haagahelia.accounting.service.AccountService;
 
 public class AccountControllerTest {
@@ -54,7 +55,8 @@ public class AccountControllerTest {
         accountController = new AccountController(
             accountRepository,
             userRepository,
-            accountService
+            accountService,
+            Mockito.mock(AccountBalanceService.class)
         );
 
         User testUser = new User();
@@ -74,7 +76,7 @@ public class AccountControllerTest {
         List<Account> accountList = Arrays.asList(acc1, acc2);
         when(accountRepository.findByUser(any(User.class))).thenReturn(accountList);
 
-        String viewName = accountController.accounts(null, model, auth);
+        String viewName = accountController.accounts(null, model, auth, "EUR");
 
         assertEquals("accounts", viewName);
     }

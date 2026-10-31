@@ -15,7 +15,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.CreateEntryRequest;
 import fi.haagahelia.accounting.api.dto.EntryResponse;
-import fi.haagahelia.accounting.api.dto.EntrySummaryResponse;
 import fi.haagahelia.accounting.api.dto.UpdateEntryRequest;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.Category;
@@ -428,26 +427,6 @@ public class EntryService {
             updated.getCategory().getName(),
             updated.getSyncId(),
             updated.getVersion()
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public EntrySummaryResponse getSummary(User currentUser) {
-        BigDecimal income = entryRepository.sumAmountByUserAndType(
-            currentUser, EntryType.INCOME
-        );
-
-        BigDecimal expense = entryRepository.sumAmountByUserAndType(
-            currentUser, EntryType.EXPENSE
-        );
-
-        income = income != null ? income : BigDecimal.ZERO;
-        expense = expense != null ? expense : BigDecimal.ZERO;
-
-        return new EntrySummaryResponse(
-            income,
-            expense,
-            income.subtract(expense)
         );
     }
 }

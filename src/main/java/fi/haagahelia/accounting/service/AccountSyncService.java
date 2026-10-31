@@ -1,6 +1,7 @@
 package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.AccountResponse;
 import fi.haagahelia.accounting.api.dto.CreateAccountRequest;
+import fi.haagahelia.accounting.api.dto.SyncAccountArchiveRequest;
 import fi.haagahelia.accounting.api.dto.SyncDeleteAccountRequest;
 import fi.haagahelia.accounting.api.dto.SyncDeleteResponse;
 import fi.haagahelia.accounting.api.dto.SyncUpdateAccountRequest;
@@ -65,7 +67,9 @@ public class AccountSyncService {
             request.name(),
             amount,
             request.description(),
-            syncId
+            syncId,
+            request.currencyCode(),
+            request.iconKey()
         );
 
         return syncCommandService.execute(
@@ -82,6 +86,9 @@ public class AccountSyncService {
                     currentUser
                 );
 
+                account.setCurrencyCode(normalized.currencyCode());
+                account.setIconKey(normalized.iconKey());
+
                 account.assignSyncId(syncId);
 
                 Account saved = accountService.createAccount(
@@ -94,7 +101,10 @@ public class AccountSyncService {
                     saved.getAmount(),
                     saved.getDescription(),
                     saved.getSyncId(),
-                    saved.getVersion()
+                    saved.getVersion(),
+                    saved.getCurrencyCode(),
+                    saved.getIconKey(),
+                    saved.getArchivedAt()
                 );
             }
         );
@@ -153,6 +163,21 @@ public class AccountSyncService {
                     );
                 }
 
+                String iconKey = request.iconKey();
+
+                if (iconKey != null) {
+                    iconKey = iconKey.trim();
+
+                    if (iconKey.isEmpty() || iconKey.length() > 64) {
+                        throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Icon key must contain between 1 and 64 characters"
+                        );
+                    }
+
+                    account.setIconKey(iconKey);
+                }
+
                 account.setName(request.name());
                 account.setDescription(request.description());
 
@@ -164,7 +189,88 @@ public class AccountSyncService {
                     account.getAmount(),
                     account.getDescription(),
                     account.getSyncId(),
-                    account.getVersion()
+                    account.getVersion(),
+                    account.getCurrencyCode(),
+                    account.getIconKey(),
+                    account.getArchivedAt()
+                );
+            }
+        );
+    }
+
+    @Transactional
+    public CompletedCommand changeArchiveState(
+            UUID commandId,
+            SyncAccountArchiveRequest request,
+            User currentUser) {
+
+        UUID syncId = request.syncId();
+        Long expectedVersion = request.expectedVersion();
+        Boolean archived = request.archived();
+
+        if (syncId == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Account sync ID is required"
+            );
+        }
+
+        if (expectedVersion == null || expectedVersion < 0) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "A non-negative expected version is required"
+            );
+        }
+
+        if (archived == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Archived state is required"
+            );
+        }
+
+        return syncCommandService.execute(
+            currentUser.getId(),
+            commandId,
+            "SET_ACCOUNT_ARCHIVE_STATE",
+            request,
+            HttpStatus.OK.value(),
+            () -> {
+                Account account = accountRepository.findOwnedBySyncId(
+                    syncId,
+                    currentUser
+                ).orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Account is unavailable for synchronization"
+                ));
+
+                if (!expectedVersion.equals(account.getVersion())) {
+                    throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Account version conflict. Synchronize before retrying."
+                    );
+                }
+
+                boolean currentlyArchived = account.getArchivedAt() != null;
+
+                if (archived.booleanValue() != currentlyArchived) {
+                    account.setArchivedAt(
+                        archived.booleanValue() ? Instant.now() : null
+                    );
+                }
+
+                accountRepository.flush();
+
+                return new AccountResponse(
+                    account.getAccount_id(),
+                    account.getName(),
+                    account.getAmount(),
+                    account.getDescription(),
+                    account.getSyncId(),
+                    account.getVersion(),
+                    account.getCurrencyCode(),
+                    account.getIconKey(),
+                    account.getArchivedAt()
                 );
             }
         );

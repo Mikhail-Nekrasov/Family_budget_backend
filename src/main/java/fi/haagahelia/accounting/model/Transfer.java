@@ -27,6 +27,16 @@ public class Transfer {
     @JoinColumn(name = "to_account_id")
     private Account toAccount;
     private BigDecimal amount;
+
+    @Column(name = "target_amount", nullable = false)
+    private BigDecimal targetAmount;
+
+    @Column(name = "source_currency_code", nullable = false, length = 3)
+    private String sourceCurrencyCode;
+
+    @Column(name = "target_currency_code", nullable = false, length = 3)
+    private String targetCurrencyCode;
+
     private LocalDateTime dateTime;
     private String description;
 
@@ -36,6 +46,9 @@ public class Transfer {
         this.fromAccount = fromAccount;
         this.toAccount = toAccount;
         this.amount = amount;
+        this.targetAmount = amount;
+        this.sourceCurrencyCode = fromAccount.getCurrencyCode();
+        this.targetCurrencyCode = toAccount.getCurrencyCode();
         this.description = description;
         this.dateTime = LocalDateTime.now();
     }
@@ -53,6 +66,22 @@ public class Transfer {
     public void setDescription(String description) { this.description = description; }
     public LocalDateTime getDateTime() { return dateTime; }
     public void setDateTime(LocalDateTime dateTime) { this.dateTime = dateTime; }
+
+    public BigDecimal getTargetAmount() {
+        return targetAmount;
+    }
+
+    public void setTargetAmount(BigDecimal targetAmount) {
+        this.targetAmount = targetAmount;
+    }
+
+    public String getSourceCurrencyCode() {
+        return sourceCurrencyCode;
+    }
+
+    public String getTargetCurrencyCode() {
+        return targetCurrencyCode;
+    }
 
     public void assignSyncId(UUID syncId) {
         if (id != null) {

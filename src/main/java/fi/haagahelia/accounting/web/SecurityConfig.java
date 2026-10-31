@@ -61,7 +61,11 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.withDefaults().matcher("/api/**")
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
+                .requestMatchers(
+                    HttpMethod.GET,
+                     "/api/auth/csrf",
+                    "/api/exchange-rates" 
+                ).permitAll()
                 .requestMatchers(
                     HttpMethod.POST,
                     "/api/auth/login",

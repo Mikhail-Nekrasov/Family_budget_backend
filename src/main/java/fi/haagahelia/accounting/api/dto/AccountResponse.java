@@ -1,6 +1,7 @@
 package fi.haagahelia.accounting.api.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 public record AccountResponse(
@@ -9,6 +10,9 @@ public record AccountResponse(
     BigDecimal amount,
     String description,
     UUID syncId,
-    Long version
+    Long version,
+    String currencyCode,
+    String iconKey,
+    Instant archivedAt
 ) {
 }
