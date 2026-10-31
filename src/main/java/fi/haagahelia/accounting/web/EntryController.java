@@ -151,6 +151,7 @@ public class EntryController {
             }
 
             model.addAttribute("totalUnavailable", true);
+            model.addAttribute("currencyCode", currency);
         }
 
         return "entries";

@@ -24,23 +24,23 @@
             <!-- Navigation buttons -->
             <div>
                 <a th:if="${type} == null"
-                   th:href="@{/entries?type=EXPENSE}" class="btn btn-warning me-2">Expenses</a>
+                   th:href="@{/entries(type=EXPENSE, currency=${currencyCode})}" class="btn btn-warning me-2">Expenses</a>
                 <a th:if="${type} == null"
-                   th:href="@{/entries?type=INCOME}" class="btn btn-success">Incomes</a>
+                   th:href="@{/entries(type=INCOME, currency=${currencyCode})}" class="btn btn-success">Incomes</a>
 
                 <a th:if="${type?.name() == 'EXPENSE'}"
-                   th:href="@{/entries?type=INCOME}" class="btn btn-success me-2">Incomes</a>
+                   th:href="@{/entries(type=INCOME, currency=${currencyCode})}" class="btn btn-success me-2">Incomes</a>
                 <a th:if="${type?.name() == 'EXPENSE'}"
-                   th:href="@{/entries}" class="btn btn-secondary">All entries</a>
+                   th:href="@{/entries(currency=${currencyCode})}" class="btn btn-secondary">All entries</a>
 
                 <a th:if="${type?.name() == 'INCOME'}"
-                   th:href="@{/entries?type=EXPENSE}" class="btn btn-warning me-2">Expenses</a>
+                   th:href="@{/entries(type=EXPENSE, currency=${currencyCode})}" class="btn btn-warning me-2">Expenses</a>
                 <a th:if="${type?.name() == 'INCOME'}"
-                   th:href="@{/entries}" class="btn btn-secondary">All entries</a>
+                   th:href="@{/entries(currency=${currencyCode})}" class="btn btn-secondary">All entries</a>
             </div>
 
             <div>
-                <a th:href="@{/accounts}" class="btn btn-outline-secondary ms-3">Accounts</a>
+                <a th:href="@{/accounts(currency=${currencyCode})}" class="btn btn-outline-secondary ms-3">Accounts</a>
 
                 <a th:if="${type != null}" 
                    th:href="@{/categories(type=${type})}" 
@@ -148,18 +148,18 @@
         <nav th:if="${totalPages > 1}" aria-label="Page navigation">
             <ul class="pagination justify-content-center">
                 <li class="page-item" th:classappend="${currentPage == 0} ? 'disabled'">
-                    <a class="page-link" th:href="@{/entries(page=${currentPage-1}, type=${type})}" aria-label="Previous">
+                    <a class="page-link" th:href="@{/entries(page=${currentPage-1}, type=${type}, currency=${currencyCode})}" aria-label="Previous">
                         <span aria-hidden="true">&laquo;</span>
                     </a>
                 </li>
 
                 <li class="page-item" th:each="i : ${#numbers.sequence(0, totalPages-1)}"
                     th:classappend="${i == currentPage} ? 'active'">
-                    <a class="page-link" th:href="@{/entries(page=${i}, type=${type})}" th:text="${i + 1}"></a>
+                    <a class="page-link" th:href="@{/entries(page=${i}, type=${type}, currency=${currencyCode})}" th:text="${i + 1}"></a>
                 </li>
 
                 <li class="page-item" th:classappend="${currentPage + 1 >= totalPages} ? 'disabled'">
-                    <a class="page-link" th:href="@{/entries(page=${currentPage+1}, type=${type})}" aria-label="Next">
+                    <a class="page-link" th:href="@{/entries(page=${currentPage+1}, type=${type}, currency=${currencyCode})}" aria-label="Next">
                         <span aria-hidden="true">&raquo;</span>
                     </a>
                 </li>

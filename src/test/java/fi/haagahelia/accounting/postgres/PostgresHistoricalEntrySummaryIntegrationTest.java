@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -69,10 +71,14 @@ class PostgresHistoricalEntrySummaryIntegrationTest {
     private HistoricalExchangeRateService historicalRates;
 
     private User owner;
+    private Map<LocalDate, HistoricalExchangeRateResponse> preparedRates;
 
     @BeforeEach
     void setUp() {
         owner = createUser();
+        preparedRates = new HashMap<>();
+        when(historicalRates.getRatesForDates(anyMap()))
+            .thenAnswer(invocation -> Map.copyOf(preparedRates));
     }
 
     private User createUser() {
@@ -165,15 +171,9 @@ class PostgresHistoricalEntrySummaryIntegrationTest {
             FIRST
         );
 
-        when(historicalRates.getRates(
-            FIRST,
-            List.of("EUR", "USD")
-        )).thenReturn(rates(FIRST, "2"));
+        preparedRates.put(FIRST, rates(FIRST, "2"));
 
-        when(historicalRates.getRates(
-            SECOND,
-            List.of("EUR", "USD")
-        )).thenReturn(rates(SECOND, "4"));
+        preparedRates.put(SECOND, rates(SECOND, "4"));
 
         mockMvc.perform(
                 get("/api/entries/summary")
@@ -186,15 +186,10 @@ class PostgresHistoricalEntrySummaryIntegrationTest {
             .andExpect(jsonPath("$.totalExpense").value(75))
             .andExpect(jsonPath("$.netAmount").value(-35));
 
-        verify(historicalRates).getRates(
-            FIRST,
-            List.of("EUR", "USD")
-        );
-
-        verify(historicalRates).getRates(
-            SECOND,
-            List.of("EUR", "USD")
-        );
+        verify(historicalRates, times(1)).getRatesForDates(Map.of(
+            FIRST, List.of("EUR", "USD"),
+            SECOND, List.of("EUR", "USD")
+        ));
     }
 
     @Test
@@ -210,10 +205,7 @@ class PostgresHistoricalEntrySummaryIntegrationTest {
                 date
             );
 
-            when(historicalRates.getRates(
-                date,
-                List.of("EUR", "USD")
-            )).thenReturn(rates(date, "3"));
+            preparedRates.put(date, rates(date, "3"));
         }
 
         mockMvc.perform(
@@ -277,10 +269,7 @@ class PostgresHistoricalEntrySummaryIntegrationTest {
             FIRST
         );
 
-        when(historicalRates.getRates(
-            FIRST,
-            List.of("EUR", "USD")
-        )).thenReturn(rates(FIRST, "2"));
+        preparedRates.put(FIRST, rates(FIRST, "2"));
 
         mockMvc.perform(
                 get("/entries")
@@ -297,6 +286,41 @@ class PostgresHistoricalEntrySummaryIntegrationTest {
     }
 
     @Test
+    void futureForeignCurrencyEntryDoesNotBreakWebPage() throws Exception {
+        LocalDate tomorrow = LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1);
+        createEntry(owner, EntryType.EXPENSE, "USD", "100", tomorrow);
+
+        mockMvc.perform(get("/api/entries/summary")
+                .with(user(owner.getUsername())))
+            .andExpect(status().isServiceUnavailable());
+        mockMvc.perform(get("/entries")
+                .param("type", "EXPENSE")
+                .with(user(owner.getUsername())))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Historical totals are temporarily unavailable")));
+        verifyNoInteractions(historicalRates);
+    }
+
+    @Test
+    void paginationAndTypeLinksPreserveCurrency() throws Exception {
+        for (int i = 0; i < 6; i++) {
+            createEntry(owner, EntryType.EXPENSE, "USD", "1", FIRST);
+        }
+
+        mockMvc.perform(get("/entries")
+                .param("type", "EXPENSE")
+                .param("currency", "USD")
+                .with(user(owner.getUsername())))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "/entries?page=1&amp;type=EXPENSE&amp;currency=USD")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "/entries?type=INCOME&amp;currency=USD")));
+        verifyNoInteractions(historicalRates);
+    }
+
+    @Test
     void unavailableRatesDoNotPreventViewingEntries()
             throws Exception {
 
@@ -308,10 +332,9 @@ class PostgresHistoricalEntrySummaryIntegrationTest {
             FIRST
         );
 
-        when(historicalRates.getRates(
-            FIRST,
-            List.of("EUR", "USD")
-        )).thenThrow(new ResponseStatusException(
+        when(historicalRates.getRatesForDates(Map.of(
+            FIRST, List.of("EUR", "USD")
+        ))).thenThrow(new ResponseStatusException(
             HttpStatus.SERVICE_UNAVAILABLE,
             "Historical exchange rate is unavailable"
         ));

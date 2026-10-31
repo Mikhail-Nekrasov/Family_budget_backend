@@ -12,6 +12,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -173,6 +175,126 @@ public class HistoricalExchangeRateService {
             "Frankfurter",
             result
         );
+    }
+
+    public synchronized Map<LocalDate, HistoricalExchangeRateResponse> getRatesForDates(
+            Map<LocalDate, List<String>> requests) {
+
+        if (requests.isEmpty()) {
+            return Map.of();
+        }
+
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        Instant now = Instant.now();
+        var selected = new TreeMap<LocalDate, List<String>>();
+        var allCurrencies = new TreeSet<String>();
+
+        for (var request : requests.entrySet()) {
+            LocalDate date = request.getKey();
+            List<String> codes = request.getValue();
+            if (date == null || date.isAfter(today)
+                    || codes == null || codes.isEmpty() || codes.size() > 200) {
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Invalid historical exchange rate request"
+                );
+            }
+            List<String> normalized = codes.stream()
+                .map(conversionService::normalizeCurrencyCode)
+                .distinct().sorted().toList();
+            selected.put(date, normalized);
+            normalized.stream().filter(code -> !"EUR".equals(code))
+                .forEach(allCurrencies::add);
+        }
+
+        Map<LocalDate, List<HistoricalExchangeRateQuote>> stored =
+            repository.findRatesForRange(
+                selected.firstKey(), selected.lastKey(), List.copyOf(allCurrencies)
+            );
+        Map<RateKey, HistoricalExchangeRateQuote> available = new HashMap<>();
+        for (var day : stored.entrySet()) {
+            for (var quote : day.getValue()) {
+                available.put(new RateKey(day.getKey(), quote.currencyCode()), quote);
+            }
+        }
+
+        Set<RateKey> needed = new HashSet<>();
+        for (var day : selected.entrySet()) {
+            for (String code : day.getValue()) {
+                if ("EUR".equals(code)) {
+                    continue;
+                }
+                RateKey key = new RateKey(day.getKey(), code);
+                var cached = available.get(key);
+                boolean recentDate = !day.getKey().isBefore(today.minusDays(7));
+                if (cached == null || (recentDate
+                        && !cached.fetchedAt().plus(REFRESH_INTERVAL).isAfter(now))) {
+                    needed.add(key);
+                }
+            }
+        }
+
+        if (!needed.isEmpty()) {
+            LocalDate from = needed.stream().map(key -> key.date())
+                .min((first, second) -> first.compareTo(second)).orElseThrow();
+            LocalDate to = needed.stream().map(key -> key.date())
+                .max((first, second) -> first.compareTo(second)).orElseThrow();
+            List<String> currencies = needed.stream().map(key -> key.currencyCode())
+                .distinct().sorted().toList();
+
+            try {
+                var loaded = client.fetchRatesForRange(from, to, currencies);
+                List<ExchangeRateQuote> relevant = loaded.stream()
+                    .filter(quote -> needed.contains(
+                        new RateKey(quote.rateDate(), quote.currencyCode())
+                    )).toList();
+                Instant fetchedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+
+                if (!relevant.isEmpty()) {
+                    repository.saveRateSeries(relevant, fetchedAt);
+                    for (var quote : relevant) {
+                        available.put(
+                            new RateKey(quote.rateDate(), quote.currencyCode()),
+                            new HistoricalExchangeRateQuote(
+                                quote.currencyCode(), quote.rate(),
+                                quote.rateDate(), fetchedAt
+                            )
+                        );
+                    }
+                }
+            } catch (RuntimeException exception) {
+                logger.warn("Unable to load historical exchange rate range {} to {}: {}",
+                    from, to, exception.getMessage());
+            }
+        }
+
+        Map<LocalDate, HistoricalExchangeRateResponse> result = new TreeMap<>();
+        for (var day : selected.entrySet()) {
+            List<HistoricalExchangeRateQuote> quotes = new ArrayList<>();
+            for (String code : day.getValue()) {
+                if ("EUR".equals(code)) {
+                    quotes.add(new HistoricalExchangeRateQuote(
+                        code, BigDecimal.ONE, day.getKey(), now
+                    ));
+                    continue;
+                }
+                var quote = available.get(new RateKey(day.getKey(), code));
+                if (quote == null) {
+                    throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "Historical exchange rate is unavailable for "
+                            + code + " on " + day.getKey()
+                    );
+                }
+                quotes.add(quote);
+            }
+            result.put(day.getKey(), new HistoricalExchangeRateResponse(
+                day.getKey(), "EUR", "Frankfurter", quotes
+            ));
+        }
+        return Map.copyOf(result);
+    }
+
+    private record RateKey(LocalDate date, String currencyCode) {
     }
 
     private void validateLoadedCurrencies(

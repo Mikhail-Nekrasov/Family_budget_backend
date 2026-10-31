@@ -113,6 +113,39 @@ public class FrankfurterClient {
             URI uri,
             @Nullable LocalDate requestedDate) {
 
+        return parseRates(fetchBody(uri), null, requestedDate, false);
+    }
+
+    public List<ExchangeRateQuote> fetchRatesForRange(
+            LocalDate from,
+            LocalDate to,
+            List<String> currencyCodes) {
+
+        if (from.isAfter(to) || to.isAfter(LocalDate.now(ZoneOffset.UTC))) {
+            throw new IllegalArgumentException("Invalid exchange rate date range");
+        }
+
+        Set<String> selected = new TreeSet<>();
+        for (String code : currencyCodes) {
+            if (code == null || !code.matches("[A-Z]{3}")) {
+                throw new IllegalArgumentException("Invalid currency code");
+            }
+            selected.add(code);
+        }
+        if (selected.isEmpty()) {
+            throw new IllegalArgumentException("At least one currency is required");
+        }
+
+        String separator = ratesUri.getRawQuery() == null ? "?" : "&";
+        URI uri = URI.create(ratesUri.toString() + separator
+            + "from=" + from + "&to=" + to
+            + "&quotes=" + String.join(",", selected));
+
+        return parseRates(fetchBody(uri), from, to, true);
+    }
+
+    private String fetchBody(URI uri) {
+
         HttpRequest request = HttpRequest.newBuilder(uri)
             .timeout(Duration.ofSeconds(15))
             .header("Accept", "application/json")
@@ -147,12 +180,14 @@ public class FrankfurterClient {
             );
         }
 
-        return parseRates(response.body(), requestedDate);
+        return response.body();
     }
 
     private List<ExchangeRateQuote> parseRates(
             String body,
-            @Nullable LocalDate requestedDate) {
+            @Nullable LocalDate earliestDate,
+            @Nullable LocalDate requestedDate,
+            boolean multipleDates) {
 
         try {
             ProviderRate[] rows = jsonMapper.readValue(
@@ -214,6 +249,12 @@ public class FrankfurterClient {
 
                 LocalDate rateDate = LocalDate.parse(row.date());
 
+                if (earliestDate != null && rateDate.isBefore(earliestDate)) {
+                    throw new IllegalArgumentException(
+                        "Exchange rate date is before the requested range"
+                    );
+                }
+
                 if (requestedDate != null
                         && rateDate.isAfter(requestedDate)) {
                     throw new IllegalArgumentException(
@@ -221,7 +262,11 @@ public class FrankfurterClient {
                     );
                 }
 
-                if (!currencies.add(currencyCode)) {
+                String key = multipleDates
+                    ? currencyCode + ":" + rateDate
+                    : currencyCode;
+
+                if (!currencies.add(key)) {
                     throw new IllegalArgumentException(
                         "Duplicate exchange rate currency"
                     );

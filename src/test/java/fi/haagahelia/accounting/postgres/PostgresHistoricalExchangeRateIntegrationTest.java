@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import fi.haagahelia.accounting.api.dto.ExchangeRateQuote;
 import fi.haagahelia.accounting.client.FrankfurterClient;
 import fi.haagahelia.accounting.repository.HistoricalExchangeRateRepository;
+import fi.haagahelia.accounting.service.HistoricalExchangeRateService;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -45,6 +47,9 @@ class PostgresHistoricalExchangeRateIntegrationTest {
 
     @Autowired
     private HistoricalExchangeRateRepository repository;
+
+    @Autowired
+    private HistoricalExchangeRateService service;
 
     @MockitoBean
     private FrankfurterClient client;
@@ -213,6 +218,36 @@ class PostgresHistoricalExchangeRateIntegrationTest {
                 Long.class
             )
         );
+    }
+
+    @Test
+    void batchStoresOnlyNeededDatesAndReadsThemFromCache() {
+        LocalDate last = DATE.plusDays(2);
+        when(client.fetchRatesForRange(DATE, last, List.of("USD")))
+            .thenReturn(List.of(
+                quote("USD", "2"),
+                new ExchangeRateQuote("USD", new BigDecimal("3"), DATE.plusDays(1)),
+                new ExchangeRateQuote("USD", new BigDecimal("4"), last)
+            ));
+
+        var requests = Map.of(
+            DATE, List.of("EUR", "USD"),
+            last, List.of("EUR", "USD")
+        );
+        var first = service.getRatesForDates(requests);
+        var second = service.getRatesForDates(requests);
+
+        assertEquals(2, first.size());
+        assertEquals(2, second.size());
+        assertEquals(Long.valueOf(2), jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM historical_exchange_rate", Long.class
+        ));
+        assertEquals(Long.valueOf(0), jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM historical_exchange_rate WHERE requested_date = ?",
+            Long.class, java.sql.Date.valueOf(DATE.plusDays(1))
+        ));
+        verify(client, times(1)).fetchRatesForRange(DATE, last, List.of("USD"));
+        verifyNoMoreInteractions(client);
     }
 
     @Test

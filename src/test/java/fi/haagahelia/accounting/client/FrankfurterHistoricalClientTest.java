@@ -74,6 +74,39 @@ class FrankfurterHistoricalClientTest {
         );
     }
 
+    @Test
+    void requestsMultipleDatesInOneHttpCall() {
+        responseBody = """
+            [
+                {"date":"2025-01-10","base":"EUR","quote":"USD","rate":2},
+                {"date":"2025-01-11","base":"EUR","quote":"USD","rate":3}
+            ]
+            """;
+
+        var rates = client.fetchRatesForRange(
+            LocalDate.of(2025, 1, 10), LocalDate.of(2025, 1, 11), List.of("USD")
+        );
+
+        assertEquals("base=EUR&from=2025-01-10&to=2025-01-11&quotes=USD", receivedQuery);
+        assertEquals(1, requestCount.get());
+        assertEquals(2, rates.size());
+        assertEquals(LocalDate.of(2025, 1, 11), rates.get(1).rateDate());
+    }
+
+    @Test
+    void rejectsDuplicateCurrencyOnSameDayInRange() {
+        responseBody = """
+            [
+                {"date":"2025-01-10","base":"EUR","quote":"USD","rate":2},
+                {"date":"2025-01-10","base":"EUR","quote":"USD","rate":3}
+            ]
+            """;
+
+        assertThrows(IllegalStateException.class, () -> client.fetchRatesForRange(
+            LocalDate.of(2025, 1, 10), LocalDate.of(2025, 1, 11), List.of("USD")
+        ));
+    }
+
     @AfterEach
     void tearDown() {
         if (server != null) {

@@ -7,14 +7,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.time.ZoneOffset;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.CurrencyAmount;
 import fi.haagahelia.accounting.api.dto.EntrySummaryResponse;
 import fi.haagahelia.accounting.api.dto.ExchangeRateQuote;
 import fi.haagahelia.accounting.api.dto.ExchangeRateSnapshot;
+import fi.haagahelia.accounting.api.dto.HistoricalExchangeRateResponse;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.EntrySummaryRepository;
@@ -58,11 +62,33 @@ public class EntrySummaryService {
         BigDecimal income = BigDecimal.ZERO;
         BigDecimal expense = BigDecimal.ZERO;
 
+        Map<LocalDate, List<String>> requests = new TreeMap<>();
+        for (var day : byDate.entrySet()) {
+            var currencies = new TreeSet<String>();
+            for (DailyTotal row : day.getValue()) {
+                if (row.amount().signum() != 0 && !target.equals(row.currencyCode())) {
+                    currencies.add(row.currencyCode());
+                }
+            }
+            if (!currencies.isEmpty()) {
+                if (day.getKey().isAfter(LocalDate.now(ZoneOffset.UTC))) {
+                    throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "Historical exchange rates are not available for future entries"
+                    );
+                }
+                currencies.add(target);
+                requests.put(day.getKey(), List.copyOf(currencies));
+            }
+        }
+        Map<LocalDate, HistoricalExchangeRateResponse> prepared = requests.isEmpty()
+            ? Map.of()
+            : historicalRates.getRatesForDates(requests);
+
         for (var day : byDate.entrySet()) {
             var snapshot = loadRates(
                 day.getKey(),
-                day.getValue(),
-                target
+                prepared
             );
 
             List<CurrencyAmount> incomeAmounts = day.getValue()
@@ -116,28 +142,12 @@ public class EntrySummaryService {
 
     private @Nullable ExchangeRateSnapshot loadRates(
             LocalDate date,
-            List<DailyTotal> rows,
-            String target) {
+            Map<LocalDate, HistoricalExchangeRateResponse> prepared) {
 
-        var currencies = new TreeSet<String>();
-
-        for (DailyTotal row : rows) {
-            if (row.amount().signum() != 0
-                    && !target.equals(row.currencyCode())) {
-                currencies.add(row.currencyCode());
-            }
-        }
-
-        if (currencies.isEmpty()) {
+        var response = prepared.get(date);
+        if (response == null) {
             return null;
         }
-
-        currencies.add(target);
-
-        var response = historicalRates.getRates(
-            date,
-            List.copyOf(currencies)
-        );
 
         var fetchedAt = response.rates().stream()
             .map(quote -> quote.fetchedAt())
