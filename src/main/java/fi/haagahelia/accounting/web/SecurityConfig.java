@@ -64,7 +64,8 @@ public class SecurityConfig {
                 .requestMatchers(
                     HttpMethod.GET,
                      "/api/auth/csrf",
-                    "/api/exchange-rates" 
+                    "/api/exchange-rates",
+                    "/api/exchange-rates/history" 
                 ).permitAll()
                 .requestMatchers(
                     HttpMethod.POST,

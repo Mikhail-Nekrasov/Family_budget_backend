@@ -250,15 +250,43 @@ class PostgresHistoricalExchangeRateIntegrationTest {
         verifyNoMoreInteractions(client);
     }
 
+    // @Test
+    // void requiresAuthentication() throws Exception {
+    //     mockMvc.perform(
+    //             get("/api/exchange-rates/history")
+    //                 .param("date", DATE.toString())
+    //                 .param("currencies", "USD,RUB")
+    //         )
+    //         .andExpect(status().isUnauthorized());
+
+    //     verifyNoInteractions(client);
+    // }
+
     @Test
-    void requiresAuthentication() throws Exception {
+    void allowsAnonymousAccessToHistoricalRates() throws Exception {
+        when(client.fetchRatesForCurrencies(
+            DATE,
+            List.of("RUB", "USD")
+        )).thenReturn(List.of(
+            quote("RUB", "105.56"),
+            quote("USD", "1.0299")
+        ));
+
         mockMvc.perform(
                 get("/api/exchange-rates/history")
                     .param("date", DATE.toString())
                     .param("currencies", "USD,RUB")
             )
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.requestedDate")
+                .value(DATE.toString()))
+            .andExpect(jsonPath("$.baseCurrency").value("EUR"))
+            .andExpect(jsonPath("$.rates.length()").value(2));
 
-        verifyNoInteractions(client);
+        verify(client).fetchRatesForCurrencies(
+            DATE,
+            List.of("RUB", "USD")
+        );
+        verifyNoMoreInteractions(client);
     }
 }
