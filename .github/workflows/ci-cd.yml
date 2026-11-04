@@ -56,9 +56,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # - name: Build Docker image
+      #   run: |
+      #     docker build --pull --platform linux/amd64 \
+      #       -t "registry.heroku.com/$HEROKU_APP_NAME/web" .
+
       - name: Build Docker image
         run: |
-          docker build --pull --platform linux/amd64 \
+          docker buildx create \
+            --name heroku-builder \
+            --driver docker-container \
+            --use
+
+          docker buildx build \
+            --pull \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            --output type=docker,oci-mediatypes=false \
             -t "registry.heroku.com/$HEROKU_APP_NAME/web" .
 
       - name: Login to Heroku Container Registry
@@ -70,8 +85,13 @@ jobs:
               --username _ \
               --password-stdin
 
+      # - name: Push Docker image
+      #   run: docker push "registry.heroku.com/$HEROKU_APP_NAME/web"
+      
       - name: Push Docker image
-        run: docker push "registry.heroku.com/$HEROKU_APP_NAME/web"
+        run: |
+          docker push --platform linux/amd64 \
+            "registry.heroku.com/$HEROKU_APP_NAME/web"
 
       - name: Release Docker image
         env:
