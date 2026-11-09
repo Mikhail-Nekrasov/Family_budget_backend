@@ -110,7 +110,10 @@ class FrankfurterClientTest {
 
         var rates = client.fetchLatestRates();
 
-        assertEquals("base=EUR", receivedQuery);
+        assertEquals(
+            "base=EUR&quotes=CHF,CZK,DKK,EUR,GBP,JPY,MXN,NOK,PLN,RUB,SEK,TRY,USD,VND",
+            receivedQuery
+        );
         assertEquals(3, rates.size());
 
         var rub = rates.stream()

@@ -20,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import fi.haagahelia.accounting.api.dto.ExchangeRateQuote;
 
@@ -27,6 +28,12 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Component
 public class FrankfurterClient {
+
+    // Keep in sync with CURRENCY_CODES in the mobile app.
+    private static final List<String> LATEST_QUOTE_CURRENCIES = List.of(
+        "CHF", "CZK", "DKK", "EUR", "GBP", "JPY", "MXN",
+        "NOK", "PLN", "RUB", "SEK", "TRY", "USD", "VND"
+    );
 
     private final HttpClient httpClient;
     private final JsonMapper jsonMapper;
@@ -46,7 +53,11 @@ public class FrankfurterClient {
     }
 
     public List<ExchangeRateQuote> fetchLatestRates() {
-        return fetchRates(ratesUri, null);
+        URI latestUri = UriComponentsBuilder.fromUri(ratesUri)
+            .replaceQueryParam("quotes", String.join(",", LATEST_QUOTE_CURRENCIES))
+            .build(true)
+            .toUri();
+        return fetchRates(latestUri, null);
     }
 
     public List<ExchangeRateQuote> fetchRatesForDate(LocalDate date) {
