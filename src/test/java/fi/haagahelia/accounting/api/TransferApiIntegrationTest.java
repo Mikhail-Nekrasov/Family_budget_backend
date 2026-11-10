@@ -151,8 +151,8 @@ class TransferApiIntegrationTest {
     }
 
     @Test
-    void rejectsTransferWithInsufficientFundsWithoutChanges() throws Exception {
-        User owner = createUser("api_insufficient_transfer_owner");
+    void createsTransferThatMakesSourceBalanceNegative() throws Exception {
+        User owner = createUser("api_overdraft_transfer_owner");
 
         Account source = createAccount("Bank", owner);
         Account destination = createAccount("Cash", owner);
@@ -165,34 +165,35 @@ class TransferApiIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                    "fromAccountId": %d,
-                    "toAccountId": %d,
-                    "amount": 101.00,
-                    "description": "Must be rejected"
+                        "fromAccountId": %d,
+                        "toAccountId": %d,
+                        "amount": 101.00,
+                        "description": "Transfer into negative balance"
                     }
                     """.formatted(
                         source.getAccount_id(),
                         destination.getAccount_id()
                     )))
-            .andExpect(status().isConflict());
+            .andExpect(status().isCreated())
+            .andExpect(content().string(""));
 
-        Account unchangedSource = accountRepository
+        Account updatedSource = accountRepository
             .findById(source.getAccount_id())
             .orElseThrow();
 
-        Account unchangedDestination = accountRepository
+        Account updatedDestination = accountRepository
             .findById(destination.getAccount_id())
             .orElseThrow();
 
         assertEquals(
             0,
-            new BigDecimal("100.00").compareTo(unchangedSource.getAmount())
+            new BigDecimal("-1.00").compareTo(updatedSource.getAmount())
         );
         assertEquals(
             0,
-            new BigDecimal("100.00").compareTo(unchangedDestination.getAmount())
+            new BigDecimal("201.00").compareTo(updatedDestination.getAmount())
         );
-        assertEquals(transfersBefore, transferRepository.count());
+        assertEquals(transfersBefore + 1, transferRepository.count());
     }
 
     @Test

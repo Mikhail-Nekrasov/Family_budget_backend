@@ -27,8 +27,7 @@ public class TransferService {
         SAME_ACCOUNT,
         DIFFERENT_CURRENCIES,
         INVALID_AMOUNT,
-        INVALID_TARGET_AMOUNT,
-        INSUFFICIENT_FUNDS
+        INVALID_TARGET_AMOUNT
     }
 
     private final AccountRepository accountRepository;
@@ -172,10 +171,6 @@ public class TransferService {
                 HttpStatus.CONFLICT,
                 "Transfer sync ID is already in use"
             );
-        }
-
-        if (from.getAmount().compareTo(amount) < 0) {
-            return TransferResult.INSUFFICIENT_FUNDS;
         }
 
         from.setAmount(from.getAmount().subtract(amount));

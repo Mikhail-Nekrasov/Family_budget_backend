@@ -175,11 +175,6 @@ public class TransferSyncService {
                 "Destination amount must be positive, have at most two decimal places "
                     + "and equal the source amount for same-currency transfers"
             );
-
-            case INSUFFICIENT_FUNDS -> throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Insufficient funds"
-            );
         }
     }
 }

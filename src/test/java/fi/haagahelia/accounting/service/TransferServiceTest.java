@@ -126,15 +126,20 @@ class TransferServiceTest {
     }
 
     @Test
-    void rejectsInsufficientFunds() {
+    void allowsTransferThatMakesSourceBalanceNegative() {
         mockAccounts();
 
         TransferResult result = transferService.executeTransfer(
             10L, 20L, new BigDecimal("1001"), "Payment", user
         );
 
-        assertEquals(TransferResult.INSUFFICIENT_FUNDS, result);
-        assertNoChanges();
+        assertEquals(TransferResult.SUCCESS, result);
+        assertEquals(new BigDecimal("-1"), from.getAmount());
+        assertEquals(new BigDecimal("1501"), to.getAmount());
+
+        verify(accountRepository).save(from);
+        verify(accountRepository).save(to);
+        verify(transferRepository).save(any(Transfer.class));
     }
 
     @Test

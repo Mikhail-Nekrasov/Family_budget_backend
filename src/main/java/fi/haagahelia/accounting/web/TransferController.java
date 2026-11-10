@@ -117,9 +117,6 @@ public class TransferController {
 
             case INVALID_TARGET_AMOUNT ->
                 "redirect:/transfer/" + toId + "?error=target";
-
-            case INSUFFICIENT_FUNDS ->
-                "redirect:/transfer/" + toId + "?error=nomoney";
         };
     }
 

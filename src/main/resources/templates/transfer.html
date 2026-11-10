@@ -21,10 +21,6 @@
             Amount must be greater than zero and have at most two decimal places
         </div>
 
-        <div th:if="${error == 'nomoney'}" class="alert alert-danger">
-            Not enough funds in the source account
-        </div>
-
         <div th:if="${error == 'target'}" class="alert alert-danger">
             Destination amount must be positive, have at most two decimal places
             and equal the source amount for same-currency transfers

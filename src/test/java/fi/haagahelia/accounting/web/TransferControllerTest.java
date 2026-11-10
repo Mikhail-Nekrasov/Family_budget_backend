@@ -101,21 +101,6 @@ public class TransferControllerTest {
     }
 
     @Test
-    public void testExecuteTransferNotEnoughMoney() {
-        BigDecimal amount = new BigDecimal("2000");
-
-        when(transferService.executeTransferWithAmounts(
-            1L, 2L, amount, null, "Payment", user, null
-        )).thenReturn(TransferResult.INSUFFICIENT_FUNDS);
-
-        String result = transferController.executeTransfer(
-            1L, 2L, amount, "Payment", auth, null
-        );
-
-        assertEquals("redirect:/transfer/2?error=nomoney", result);
-    }
-
-    @Test
     public void testExecuteTransferInvalidAmount() {
         BigDecimal amount = new BigDecimal("-50");
 
