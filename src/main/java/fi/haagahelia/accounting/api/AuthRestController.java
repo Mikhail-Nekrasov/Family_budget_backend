@@ -14,6 +14,8 @@ import fi.haagahelia.accounting.api.dto.AuthResponse;
 import fi.haagahelia.accounting.api.dto.CsrfResponse;
 import fi.haagahelia.accounting.api.dto.RegisterRequest;
 import fi.haagahelia.accounting.model.User;
+import fi.haagahelia.accounting.repository.UserRepository;
+import org.springframework.web.server.ResponseStatusException;
 import fi.haagahelia.accounting.service.RegistrationService;
 
 @RestController
@@ -22,8 +24,11 @@ public class AuthRestController {
 
     private final RegistrationService registrationService;
 
-    public AuthRestController(RegistrationService registrationService) {
+    private final UserRepository users;
+
+    public AuthRestController(RegistrationService registrationService, UserRepository users) {
         this.registrationService = registrationService;
+        this.users = users;
     }
 
     @GetMapping("/csrf")
@@ -35,9 +40,15 @@ public class AuthRestController {
     }
 
     @GetMapping("/me")
-    public AuthResponse getCurrentUser(Authentication auth) {
-        return new AuthResponse(auth.getName());
+    public CurrentUserResponse getCurrentUser(Authentication auth) {
+        User user = users.findByUsername(auth.getName());
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User no longer exists");
+        }
+        return new CurrentUserResponse(user.getId().toString(), user.getUsername());
     }
+
+    public record CurrentUserResponse(String userId, String username) {}
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(

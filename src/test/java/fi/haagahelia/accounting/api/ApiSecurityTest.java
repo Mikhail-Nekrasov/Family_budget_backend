@@ -188,12 +188,19 @@ class ApiSecurityTest {
     }
 
     @Test
+    @Transactional
     void returnsCurrentAuthenticatedUser() throws Exception {
+        User account = new User();
+        account.setUsername("session_user");
+        account.setPassword(passwordEncoder.encode("test-password"));
+        account.setRoles(Set.of());
+        userRepository.saveAndFlush(account);
         mockMvc.perform(get("/api/auth/me")
                 .with(user("session_user"))
                 .accept(MediaType.APPLICATION_JSON))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.username").value("session_user"));
+            .andExpect(jsonPath("$.username").value("session_user"))
+            .andExpect(jsonPath("$.userId").value(account.getId().toString()));
     }
 
     @Test
