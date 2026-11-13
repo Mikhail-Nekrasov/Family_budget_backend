@@ -60,6 +60,11 @@ public class SecurityConfig {
             .securityMatcher(
                 PathPatternRequestMatcher.withDefaults().matcher("/api/**")
             )
+            // These two endpoints authenticate with an explicit mobile token, not a cookie.
+            .csrf(csrf -> csrf.ignoringRequestMatchers(
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/auth/mobile/restore"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/auth/mobile/revoke")
+            ))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     HttpMethod.GET,
@@ -70,7 +75,9 @@ public class SecurityConfig {
                 .requestMatchers(
                     HttpMethod.POST,
                     "/api/auth/login",
-                    "/api/auth/register"
+                    "/api/auth/register",
+                    "/api/auth/mobile/restore",
+                    "/api/auth/mobile/revoke"
                 ).permitAll()
                 .anyRequest().authenticated()
             )

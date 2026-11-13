@@ -289,4 +289,45 @@ class ApiSecurityTest {
 
         assertTrue(session.isInvalid());
     }
+    @Test
+    @Transactional
+    void mobileTokenRestoresSessionAndCannotBeReusedAfterRevocation() throws Exception {
+        User account = new User();
+        account.setUsername("mobile_session_user");
+        account.setPassword(passwordEncoder.encode("test-password"));
+        account.setRoles(Set.of());
+        userRepository.saveAndFlush(account);
+
+        mockMvc.perform(post("/api/auth/mobile/token").with(csrf()))
+                .andExpect(status().isUnauthorized());
+
+        var issued = mockMvc.perform(post("/api/auth/mobile/token")
+                .with(user("mobile_session_user")).with(csrf()))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String tokenBody = issued.getResponse().getContentAsString();
+        var restored = mockMvc.perform(post("/api/auth/mobile/restore")
+                .contentType(MediaType.APPLICATION_JSON).content(tokenBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("mobile_session_user"))
+                .andReturn();
+
+        MockHttpSession session = (MockHttpSession) restored.getRequest().getSession(false);
+        assertNotNull(session);
+        mockMvc.perform(get("/api/auth/me").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("mobile_session_user"));
+
+        mockMvc.perform(post("/api/auth/mobile/revoke")
+                .contentType(MediaType.APPLICATION_JSON).content(tokenBody))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/auth/logout").session(session).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/auth/mobile/restore")
+                .contentType(MediaType.APPLICATION_JSON).content(tokenBody))
+                .andExpect(status().isUnauthorized());
+    }
 }
