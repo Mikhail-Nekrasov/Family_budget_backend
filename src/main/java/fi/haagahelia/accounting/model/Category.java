@@ -29,6 +29,9 @@ public class Category {
     )
     private UUID syncId = UUID.randomUUID();
     private String name;
+
+    @Column(name = "default_key", length = 64, updatable = false)
+    private String defaultKey;
     @Version
     private Long version;
 
@@ -49,6 +52,16 @@ public class Category {
         this.name = name;
         this.type = type;
         this.user = user;
+    }
+
+    public static Category fromTemplate(String name, EntryType type, User user, String defaultKey) {
+        Category category = new Category(name, type, user);
+        category.defaultKey = defaultKey;
+        return category;
+    }
+
+    public String getDefaultKey() {
+        return defaultKey;
     }
 
     public Long getCategory_id() {

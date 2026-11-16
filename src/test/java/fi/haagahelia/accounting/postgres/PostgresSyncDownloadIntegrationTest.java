@@ -89,19 +89,28 @@ class PostgresSyncDownloadIntegrationTest {
     }
 
     @Test
-    void firstFullDownloadForNewRegistrationIsEmpty() {
+    void firstFullDownloadForNewRegistrationContainsTemplateKeys() {
         User registered = registration.register(
             "new_budget_" + UUID.randomUUID(), "test-password", "test-password"
         );
         try {
             var download = downloads.start(null, registered);
             assertEquals("FULL", download.mode());
-            assertEquals(0L, download.itemCount());
+            assertEquals(38L, download.itemCount());
             var page = downloads.page(download.downloadId(), 0, registered);
-            assertTrue(page.items().isEmpty());
+            assertEquals(38, page.items().size());
+            assertTrue(page.items().stream().allMatch(item -> "CATEGORY".equals(item.entityType())));
+            assertEquals(38L, page.items().stream()
+                .map(item -> item.data().get("defaultKey").asText()).distinct().count());
+            assertTrue(page.items().stream().anyMatch(item ->
+                "groceries".equals(item.data().get("defaultKey").asText())
+                    && "EXPENSE".equals(item.data().get("type").asText())
+            ));
+            assertNull(categories.findById(category.getCategory_id()).orElseThrow().getDefaultKey());
             assertNull(page.nextAfter());
             assertEquals(download.downloadId(), page.nextCursor());
         } finally {
+            jdbc.update("DELETE FROM category WHERE user_id = ?", registered.getId());
             users.deleteById(registered.getId());
         }
     }

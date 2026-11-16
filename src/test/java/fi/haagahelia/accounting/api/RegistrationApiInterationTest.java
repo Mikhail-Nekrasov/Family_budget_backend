@@ -82,7 +82,14 @@ class RegistrationApiIntegrationTest {
                 .param("password", "test-password"))
             .andExpect(status().isOk());
 
-        assertTrue(categoryRepository.findByUser(saved).isEmpty());
+        var categories = categoryRepository.findByUser(saved);
+        assertEquals(38, categories.size());
+        assertEquals(31L, categories.stream()
+            .filter(category -> category.getType() == EntryType.EXPENSE).count());
+        assertEquals(7L, categories.stream()
+            .filter(category -> category.getType() == EntryType.INCOME).count());
+        assertTrue(categories.stream().allMatch(category -> category.getDefaultKey() != null));
+        assertEquals(38L, categories.stream().map(Category::getDefaultKey).distinct().count());
     }
 
     @Test
@@ -178,12 +185,12 @@ class RegistrationApiIntegrationTest {
             "test-password"
         );
 
-        Category firstGroceries = categoryRepository.saveAndFlush(
-            new Category("Groceries", EntryType.EXPENSE, first)
-        );
-        Category secondGroceries = categoryRepository.saveAndFlush(
-            new Category("Groceries", EntryType.EXPENSE, second)
-        );
+        Category firstGroceries = categoryRepository.findByUser(first).stream()
+            .filter(category -> "groceries".equals(category.getDefaultKey()))
+            .findFirst().orElseThrow();
+        Category secondGroceries = categoryRepository.findByUser(second).stream()
+            .filter(category -> "groceries".equals(category.getDefaultKey()))
+            .findFirst().orElseThrow();
 
         assertNotEquals(
             firstGroceries.getCategory_id(),
@@ -218,7 +225,7 @@ class RegistrationApiIntegrationTest {
             categoryRepository.existsById(secondGroceries.getCategory_id())
         );
 
-        assertTrue(categoryRepository.findByUser(first).isEmpty());
-        assertEquals(1, categoryRepository.findByUser(second).size());
+        assertEquals(37, categoryRepository.findByUser(first).size());
+        assertEquals(38, categoryRepository.findByUser(second).size());
     }
 }
