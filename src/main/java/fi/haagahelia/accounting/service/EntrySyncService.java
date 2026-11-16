@@ -17,6 +17,7 @@ import fi.haagahelia.accounting.api.dto.UpdateEntryRequest;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.repository.EntryRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedCommand;
 import fi.haagahelia.accounting.model.User;
 
@@ -30,6 +31,7 @@ public class EntrySyncService {
     private final CategoryRepository categoryRepository;
     private final SyncCommandService syncCommandService;
     private final EntryRepository entryRepository;
+    private final SyncTombstoneRepository tombstones;
 
     public EntrySyncService(
             EntryService entryService,
@@ -37,6 +39,7 @@ public class EntrySyncService {
             CategoryRepository categoryRepository,
             SyncCommandService syncCommandService,
             EntryRepository entryRepository,
+            SyncTombstoneRepository tombstones,
             PersonalSyncPolicy personalSyncPolicy) {
 
         this.personalSyncPolicy = personalSyncPolicy;
@@ -46,6 +49,7 @@ public class EntrySyncService {
         this.categoryRepository = categoryRepository;
         this.syncCommandService = syncCommandService;
         this.entryRepository = entryRepository;
+        this.tombstones = tombstones;
     }
 
     @Transactional
@@ -172,10 +176,12 @@ public class EntrySyncService {
             () -> {
                 var existing = entryRepository.findOwnedBySyncId(
                     syncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Entry is unavailable for synchronization"
-                ));
+                ).orElseThrow(() -> {
+                    if (tombstones.entryWasDeleted(currentUser.getId(), syncId)) {
+                        return new ResponseStatusException(HttpStatus.GONE, "Entry was deleted on the server");
+                    }
+                    return new ResponseStatusException(HttpStatus.NOT_FOUND, "Entry is unavailable for synchronization");
+                });
 
                 personalSyncPolicy.requirePrivateAccount(existing.getAccount());
 

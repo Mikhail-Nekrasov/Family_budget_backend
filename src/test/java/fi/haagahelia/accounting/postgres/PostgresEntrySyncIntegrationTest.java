@@ -767,6 +767,19 @@ class PostgresEntrySyncIntegrationTest {
 
         entryRepository.flush();
 
+        mockMvc.perform(
+                put("/api/sync/entries/{commandId}", UUID.randomUUID())
+                    .with(user(owner.getUsername()))
+                    .with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {"syncId":"%s","expectedVersion":0,"title":"Edited expense","type":"EXPENSE",
+                         "amount":30,"dateTime":"2026-10-19T12:00:00","accountSyncId":"%s","categorySyncId":"%s"}
+                        """.formatted(syncId, account.getSyncId(), category.getSyncId()))
+            )
+            .andExpect(status().isGone())
+            .andExpect(jsonPath("$.message").value("Entry was deleted on the server"));
+
         UUID createCommandId = UUID.randomUUID();
 
         mockMvc.perform(
