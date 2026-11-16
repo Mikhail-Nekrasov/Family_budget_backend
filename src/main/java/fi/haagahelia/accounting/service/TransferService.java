@@ -1,6 +1,7 @@
 package fi.haagahelia.accounting.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.jspecify.annotations.Nullable;
@@ -69,20 +70,7 @@ public class TransferService {
         return transferRepository.findVisiblePageByUser(
                 currentUser, PageRequest.of(page, size)
             )
-            .map(transfer -> new TransferResponse(
-                transfer.getId(),
-                transfer.getFromAccount().getAccount_id(),
-                transfer.getFromAccount().getName(),
-                transfer.getToAccount().getAccount_id(),
-                transfer.getToAccount().getName(),
-                transfer.getAmount(),
-                transfer.getDateTime(),
-                transfer.getDescription(),
-                transfer.getSyncId(),
-                transfer.getTargetAmount(),
-                transfer.getSourceCurrencyCode(),
-                transfer.getTargetCurrencyCode()
-            ));
+            .map(TransferResponse::from);
     }
 
     @Transactional
@@ -115,6 +103,16 @@ public class TransferService {
             User currentUser,
             @Nullable UUID syncId) {
 
+        return executeTransferWithAmounts(
+            fromId, toId, amount, targetAmount, description, currentUser, syncId, null
+        );
+    }
+
+    TransferResult executeTransferWithAmounts(
+            Long fromId, Long toId, BigDecimal amount,
+            @Nullable BigDecimal targetAmount, String description, User currentUser,
+            @Nullable UUID syncId, @Nullable LocalDateTime dateTime) {
+
         Account from = accountRepository.findById(fromId).orElse(null);
         Account to = accountRepository.findById(toId).orElse(null);
 
@@ -124,13 +122,81 @@ public class TransferService {
             return TransferResult.INVALID_ACCOUNTS;
         }
 
-        if (fromId.equals(toId)) {
+        TransferResult validation = validateAmounts(from, to, amount, targetAmount);
+        if (validation != TransferResult.SUCCESS) {
+            return validation;
+        }
+
+        Transfer transfer = new Transfer(from, to, amount, description);
+        transfer.setTargetAmount(targetAmount != null ? targetAmount : amount);
+        if (dateTime != null) {
+            transfer.setDateTime(dateTime);
+        }
+
+        if (syncId != null) {
+            transfer.assignSyncId(syncId);
+        }
+
+        if (transferRepository.existsBySyncId(transfer.getSyncId())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Transfer sync ID is already in use"
+            );
+        }
+
+        applyBalances(from, to, transfer.getAmount(), transfer.getTargetAmount());
+
+        accountRepository.save(from);
+        accountRepository.save(to);
+        transferRepository.save(transfer);
+
+        return TransferResult.SUCCESS;
+    }
+
+    TransferResult updateTransfer(
+            Transfer transfer, Account from, Account to, BigDecimal amount,
+            @Nullable BigDecimal targetAmount, LocalDateTime dateTime, String description) {
+        TransferResult validation = validateAmounts(from, to, amount, targetAmount);
+        if (validation != TransferResult.SUCCESS) {
+            return validation;
+        }
+
+        reverseBalances(transfer);
+        BigDecimal credit = targetAmount != null ? targetAmount : amount;
+        applyBalances(from, to, amount, credit);
+        transfer.setFromAccount(from);
+        transfer.setToAccount(to);
+        transfer.setAmount(amount);
+        transfer.setTargetAmount(credit);
+        transfer.setDateTime(dateTime);
+        transfer.setDescription(description);
+        return TransferResult.SUCCESS;
+    }
+
+    void deleteTransfer(Transfer transfer) {
+        reverseBalances(transfer);
+        transferRepository.delete(transfer);
+    }
+
+    private void reverseBalances(Transfer transfer) {
+        applyBalances(transfer.getFromAccount(), transfer.getToAccount(),
+            transfer.getAmount().negate(), transfer.getTargetAmount().negate());
+    }
+
+    private void applyBalances(Account from, Account to, BigDecimal debit, BigDecimal credit) {
+        from.setAmount(from.getAmount().subtract(debit));
+        to.setAmount(to.getAmount().add(credit));
+    }
+
+    private TransferResult validateAmounts(
+            Account from, Account to, BigDecimal amount, @Nullable BigDecimal targetAmount) {
+        if (from.getAccount_id().equals(to.getAccount_id())) {
             return TransferResult.SAME_ACCOUNT;
         }
 
         if (amount == null
                 || amount.compareTo(BigDecimal.ZERO) <= 0
-                || amount.stripTrailingZeros().scale() > 2) {
+                || amount.stripTrailingZeros().scale() > AmountPrecision.fractionDigits(from)) {
             return TransferResult.INVALID_AMOUNT;
         }
 
@@ -148,37 +214,13 @@ public class TransferService {
         }
 
         if (creditedAmount.compareTo(BigDecimal.ZERO) <= 0
-                || creditedAmount.stripTrailingZeros().scale() > 2) {
+                || creditedAmount.stripTrailingZeros().scale() > AmountPrecision.fractionDigits(to)) {
             return TransferResult.INVALID_TARGET_AMOUNT;
         }
 
         if (sameCurrency && creditedAmount.compareTo(amount) != 0) {
             return TransferResult.INVALID_TARGET_AMOUNT;
         }
-
-        Transfer transfer = new Transfer(
-            from, to, amount, description
-        );
-
-        transfer.setTargetAmount(creditedAmount);
-
-        if (syncId != null) {
-            transfer.assignSyncId(syncId);
-        }
-
-        if (transferRepository.existsBySyncId(transfer.getSyncId())) {
-            throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Transfer sync ID is already in use"
-            );
-        }
-
-        from.setAmount(from.getAmount().subtract(amount));
-        to.setAmount(to.getAmount().add(creditedAmount));
-
-        accountRepository.save(from);
-        accountRepository.save(to);
-        transferRepository.save(transfer);
 
         return TransferResult.SUCCESS;
     }

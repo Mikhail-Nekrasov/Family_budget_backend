@@ -16,6 +16,8 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -174,6 +176,38 @@ class EntryApiIntegrationTest {
                 user
             )
         );
+    }
+
+    @ParameterizedTest
+    @CsvSource({"JPY, 25.00, 201, 75", "JPY, 25.01, 400, 100",
+        "VND, 25.01, 400, 100"})
+    void validatesEntryAmountUsingAccountCurrency(
+            String currency, String amount, int responseStatus,
+            String expectedBalance) throws Exception {
+        Account account = new Account("Cash", new BigDecimal("100"), "", owner);
+        account.setCurrencyCode(currency);
+        accountRepository.saveAndFlush(account);
+
+        Category category = categoryRepository.saveAndFlush(
+            new Category("Food", EntryType.EXPENSE, owner)
+        );
+
+        long entriesBefore = entryRepository.count();
+        mockMvc.perform(post("/api/entries")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title":"Lunch","type":"EXPENSE","amount":%s,
+                     "dateTime":"2026-10-12T12:00:00","accountId":%d,
+                     "categoryId":%d}
+                    """.formatted(amount, account.getAccount_id(),
+                        category.getCategory_id())))
+            .andExpect(status().is(responseStatus));
+
+        assertEquals(0, new BigDecimal(expectedBalance).compareTo(account.getAmount()));
+        assertEquals(entriesBefore + (responseStatus == 201 ? 1 : 0),
+            entryRepository.count());
     }
 
     @Test

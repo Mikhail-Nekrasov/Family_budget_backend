@@ -76,14 +76,6 @@ public class EntryService {
             );
         }
         
-        // Ensure that the amount has at most two decimal places
-        if (entry.getAmount().stripTrailingZeros().scale() > 2) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Amount must have at most two decimal places"
-            );
-        }
-
         // Ensure that the account and category are provided and exist in the database
         if (entry.getAccount() == null || entry.getAccount().getAccount_id() == null
                 || entry.getCategory() == null || entry.getCategory().getCategory_id() == null) {
@@ -100,6 +92,14 @@ public class EntryService {
             throw new ResponseStatusException(
                 HttpStatus.FORBIDDEN,
                 "Account editing access denied"
+            );
+        }
+
+        int fractionDigits = AmountPrecision.fractionDigits(account);
+        if (entry.getAmount().stripTrailingZeros().scale() > fractionDigits) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                AmountPrecision.validationMessage(fractionDigits)
             );
         }
 

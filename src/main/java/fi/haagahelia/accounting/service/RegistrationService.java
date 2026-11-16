@@ -20,16 +20,13 @@ public class RegistrationService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final BCryptPasswordEncoder passwordEncoder;
-    private final DefaultCategoryService defaultCategoryService;
 
     public RegistrationService(UserRepository userRepository,
                                RoleRepository roleRepository,
-                               BCryptPasswordEncoder passwordEncoder,
-                               DefaultCategoryService defaultCategoryService) {
+                               BCryptPasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
-        this.defaultCategoryService = defaultCategoryService;
     }
 
     @Transactional
@@ -85,9 +82,6 @@ public class RegistrationService {
         user.setPassword(passwordEncoder.encode(password));
         user.setRoles(Set.of(role));
 
-        User savedUser = userRepository.save(user);
-        defaultCategoryService.createForUser(savedUser);
-
-        return savedUser;
+        return userRepository.save(user);
     }
 }

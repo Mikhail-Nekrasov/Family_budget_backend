@@ -133,7 +133,20 @@ class PostgresAccountMetadataApiIntegrationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "EU", "ZZZ", "JPY", "KWD"})
+    @ValueSource(strings = {"JPY", "VND"})
+    void createsZeroDecimalCurrencyAccountThroughSync(String currencyCode)
+            throws Exception {
+        mockMvc.perform(createRequest(true, requestBody(currencyCode, "cash")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.currencyCode").value(currencyCode))
+            .andExpect(jsonPath("$.amount").value(100));
+
+        var saved = accountRepository.findByUser(owner).get(0);
+        assertEquals(0, new BigDecimal("100").compareTo(saved.getAmount()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "EU", "ZZZ", "KWD"})
     void rejectsInvalidOrUnsupportedCurrency(String currencyCode)
             throws Exception {
 

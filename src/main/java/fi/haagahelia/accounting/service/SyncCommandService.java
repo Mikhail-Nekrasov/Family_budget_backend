@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import fi.haagahelia.accounting.repository.SyncCommandRepository;
 import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedCommand;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @Service
 public class SyncCommandService {
@@ -78,6 +79,12 @@ public class SyncCommandService {
         );
 
         return completed;
+    }
+
+    ObjectNode withAccountVersionChanges(Object result, AccountVersionChanges accounts) {
+        ObjectNode response = jsonMapper.valueToTree(result);
+        response.set("accountVersionChanges", jsonMapper.valueToTree(accounts.afterFlush()));
+        return response;
     }
 
     private static String sha256(String value) {

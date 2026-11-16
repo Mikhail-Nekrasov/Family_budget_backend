@@ -18,11 +18,11 @@
         </div>
 
         <div th:if="${error == 'invalid'}" class="alert alert-danger">
-            Amount must be greater than zero and have at most two decimal places
+            Amount must be greater than zero and use the source currency precision
         </div>
 
         <div th:if="${error == 'target'}" class="alert alert-danger">
-            Destination amount must be positive, have at most two decimal places
+            Destination amount must be positive, use the destination currency precision
             and equal the source amount for same-currency transfers
         </div>
 

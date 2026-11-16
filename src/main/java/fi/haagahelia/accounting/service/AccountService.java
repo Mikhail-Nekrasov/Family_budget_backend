@@ -63,10 +63,11 @@ public class AccountService {
             );
         }
 
-        if (currency.getDefaultFractionDigits() != 2) {
+        int fractionDigits = currency.getDefaultFractionDigits();
+        if (fractionDigits < 0 || fractionDigits > 2) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
-                "Only currencies with two decimal places are currently supported"
+                "Only currencies with zero to two decimal places are currently supported"
             );
         }
 
@@ -82,10 +83,10 @@ public class AccountService {
         }
 
         if (account.getAmount() != null
-                && account.getAmount().stripTrailingZeros().scale() > 2) {
+                && account.getAmount().stripTrailingZeros().scale() > fractionDigits) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
-                "Amount must have at most two decimal places"
+                AmountPrecision.validationMessage(fractionDigits)
             );
         }
 

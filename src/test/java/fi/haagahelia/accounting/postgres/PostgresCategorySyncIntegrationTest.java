@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.util.UUID;
@@ -18,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import fi.haagahelia.accounting.model.Category;
@@ -356,4 +358,105 @@ class PostgresCategorySyncIntegrationTest {
             "SELECT COUNT(*) FROM sync_command WHERE user_id = ? AND command_id = ?",
             Long.class, owner.getId(), commandId));
     }
+
+    @Test
+    void renamesCategoryOnceAndPublishesTheChange() throws Exception {
+        Category category = categoryRepository.saveAndFlush(
+            new Category("Old name", EntryType.EXPENSE, owner)
+        );
+        long originalVersion = category.getVersion();
+        long changesBefore = categoryChanges(category);
+        UUID commandId = UUID.randomUUID();
+
+        String response = renameCategory(category, commandId, originalVersion, "  New name  ")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.syncId").value(category.getSyncId().toString()))
+            .andExpect(jsonPath("$.name").value("New name"))
+            .andExpect(jsonPath("$.type").value("EXPENSE"))
+            .andExpect(jsonPath("$.version").value(originalVersion + 1))
+            .andReturn().getResponse().getContentAsString();
+
+        renameCategory(category, commandId, originalVersion, "  New name  ")
+            .andExpect(status().isOk())
+            .andExpect(content().string(response));
+
+        renameCategory(category, commandId, originalVersion, "Different name")
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message").value(
+                "Command ID is already used for a different request"
+            ));
+
+        renameCategory(category, UUID.randomUUID(), originalVersion, "Stale edit")
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message").value(
+                "Category version conflict. Synchronize before retrying."
+            ));
+
+        assertEquals(changesBefore + 1, categoryChanges(category));
+        assertEquals("New name", category.getName());
+        assertEquals(originalVersion + 1, category.getVersion());
+    }
+
+    @Test
+    void rejectsInvalidCategoryNameAndVersion() throws Exception {
+        Category category = categoryRepository.saveAndFlush(
+            new Category("Original", EntryType.INCOME, owner)
+        );
+        long changesBefore = categoryChanges(category);
+
+        renameCategory(category, UUID.randomUUID(), category.getVersion(), "   ")
+            .andExpect(status().isBadRequest());
+        renameCategory(category, UUID.randomUUID(), category.getVersion(), "x".repeat(256))
+            .andExpect(status().isBadRequest());
+        renameCategory(category, UUID.randomUUID(), -1, "Valid name")
+            .andExpect(status().isBadRequest());
+
+        assertEquals("Original", category.getName());
+        assertEquals(changesBefore, categoryChanges(category));
+    }
+
+    @Test
+    void cannotRenameForeignOrGlobalCategory() throws Exception {
+        User other = new User();
+        other.setUsername("foreign_category_" + UUID.randomUUID());
+        other.setPassword("unused");
+        other = userRepository.saveAndFlush(other);
+        Category foreign = categoryRepository.saveAndFlush(
+            new Category("Foreign", EntryType.EXPENSE, other)
+        );
+        Category global = categoryRepository.saveAndFlush(
+            new Category("Global", EntryType.EXPENSE, null)
+        );
+
+        renameCategory(foreign, UUID.randomUUID(), foreign.getVersion(), "Changed foreign")
+            .andExpect(status().isNotFound());
+        renameCategory(global, UUID.randomUUID(), global.getVersion(), "Changed global")
+            .andExpect(status().isNotFound());
+
+        assertEquals("Foreign", foreign.getName());
+        assertEquals("Global", global.getName());
+    }
+
+    private ResultActions renameCategory(
+            Category category, UUID commandId, long version, String name) throws Exception {
+        return mockMvc.perform(
+            put("/api/sync/categories/{commandId}", commandId)
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"syncId":"%s", "expectedVersion":%d, "name":"%s"}
+                    """.formatted(category.getSyncId(), version, name))
+        );
+    }
+
+    private long categoryChanges(Category category) {
+        return jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(*) FROM sync_change
+            WHERE user_id = ? AND entity_type = 'CATEGORY' AND sync_id = ?
+            """,
+            Long.class, owner.getId(), category.getSyncId()
+        );
+    }
+
 }

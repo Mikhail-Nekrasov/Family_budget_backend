@@ -7,8 +7,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import java.util.List;
-
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -84,36 +82,7 @@ class RegistrationApiIntegrationTest {
                 .param("password", "test-password"))
             .andExpect(status().isOk());
 
-        List<Category> categories = categoryRepository.findByUser(saved);
-
-        assertEquals(19, categories.size());
-
-        assertEquals(
-            14L,
-            categories.stream()
-                .filter(category -> category.getType() == EntryType.EXPENSE)
-                .count()
-        );
-
-        assertEquals(
-            5L,
-            categories.stream()
-                .filter(category -> category.getType() == EntryType.INCOME)
-                .count()
-        );
-
-        assertEquals(
-            19L,
-            categories.stream()
-                .map(category -> category.getName())
-                .distinct()
-                .count()
-        );
-
-        assertTrue(categories.stream().allMatch(category ->
-            !category.isGlobal()
-                && saved.getId().equals(category.getUser().getId())
-        ));
+        assertTrue(categoryRepository.findByUser(saved).isEmpty());
     }
 
     @Test
@@ -194,45 +163,34 @@ class RegistrationApiIntegrationTest {
     }
 
     @Test
-    void deletingDefaultCategoryDoesNotAffectAnotherUser()
+    void deletingCategoryDoesNotAffectAnotherUser()
             throws Exception {
 
         User first = registrationService.register(
-            "default_category_first",
+            "category_owner_first",
             "test-password",
             "test-password"
         );
 
         User second = registrationService.register(
-            "default_category_second",
+            "category_owner_second",
             "test-password",
             "test-password"
         );
 
-        Category firstGroceries = categoryRepository.findByUser(first)
-            .stream()
-            .filter(category ->
-                category.getName().equals("Groceries")
-                    && category.getType() == EntryType.EXPENSE
-            )
-            .findFirst()
-            .orElseThrow();
-
-        Category secondGroceries = categoryRepository.findByUser(second)
-            .stream()
-            .filter(category ->
-                category.getName().equals("Groceries")
-                    && category.getType() == EntryType.EXPENSE
-            )
-            .findFirst()
-            .orElseThrow();
+        Category firstGroceries = categoryRepository.saveAndFlush(
+            new Category("Groceries", EntryType.EXPENSE, first)
+        );
+        Category secondGroceries = categoryRepository.saveAndFlush(
+            new Category("Groceries", EntryType.EXPENSE, second)
+        );
 
         assertNotEquals(
             firstGroceries.getCategory_id(),
             secondGroceries.getCategory_id()
         );
 
-        // Even matching default categories belong to different users.
+        // Even categories with the same name belong to different users.
         mockMvc.perform(delete(
                     "/api/categories/{id}",
                     secondGroceries.getCategory_id()
@@ -241,7 +199,7 @@ class RegistrationApiIntegrationTest {
                 .with(csrf()))
             .andExpect(status().isForbidden());
 
-        // The user's own unused default category can be deleted.
+        // The user's own unused category can be deleted.
         mockMvc.perform(delete(
                     "/api/categories/{id}",
                     firstGroceries.getCategory_id()
@@ -260,7 +218,7 @@ class RegistrationApiIntegrationTest {
             categoryRepository.existsById(secondGroceries.getCategory_id())
         );
 
-        assertEquals(18, categoryRepository.findByUser(first).size());
-        assertEquals(19, categoryRepository.findByUser(second).size());
+        assertTrue(categoryRepository.findByUser(first).isEmpty());
+        assertEquals(1, categoryRepository.findByUser(second).size());
     }
 }

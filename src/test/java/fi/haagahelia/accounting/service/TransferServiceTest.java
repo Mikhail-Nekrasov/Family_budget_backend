@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -123,6 +124,32 @@ class TransferServiceTest {
 
         assertEquals(TransferResult.INVALID_AMOUNT, result);
         assertNoChanges();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "JPY, EUR, 200.01, 1.50, INVALID_AMOUNT",
+        "EUR, VND, 200.01, 800.10, INVALID_TARGET_AMOUNT",
+        "EUR, JPY, 200.01, 800.00, SUCCESS"
+    })
+    void appliesEachTransferAccountsCurrencyPrecision(
+            String sourceCurrency, String targetCurrency,
+            String debit, String credit, TransferResult expected) {
+        from.setCurrencyCode(sourceCurrency);
+        to.setCurrencyCode(targetCurrency);
+        mockAccounts();
+
+        assertEquals(expected, transferService.executeTransferWithAmounts(
+            10L, 20L, new BigDecimal(debit), new BigDecimal(credit),
+            "Payment", user, null
+        ));
+
+        if (expected == TransferResult.SUCCESS) {
+            assertEquals(0, new BigDecimal("799.99").compareTo(from.getAmount()));
+            assertEquals(0, new BigDecimal("1300").compareTo(to.getAmount()));
+        } else {
+            assertNoChanges();
+        }
     }
 
     @Test

@@ -9,11 +9,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.SyncCreateTransferRequest;
+import fi.haagahelia.accounting.api.dto.SyncDeleteResponse;
+import fi.haagahelia.accounting.api.dto.SyncDeleteTransferRequest;
+import fi.haagahelia.accounting.api.dto.SyncUpdateTransferRequest;
 import fi.haagahelia.accounting.api.dto.TransferResponse;
+import fi.haagahelia.accounting.model.Account;
+import fi.haagahelia.accounting.model.Transfer;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
 import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedCommand;
 import fi.haagahelia.accounting.repository.TransferRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.service.TransferService.TransferResult;
 
 @Service
@@ -25,13 +31,15 @@ public class TransferSyncService {
     private final AccountRepository accountRepository;
     private final TransferRepository transferRepository;
     private final SyncCommandService syncCommandService;
+    private final SyncTombstoneRepository tombstones;
 
     public TransferSyncService(
             TransferService transferService,
             AccountRepository accountRepository,
             TransferRepository transferRepository,
             SyncCommandService syncCommandService,
-            PersonalSyncPolicy personalSyncPolicy) {
+            PersonalSyncPolicy personalSyncPolicy,
+            SyncTombstoneRepository tombstones) {
 
         this.personalSyncPolicy = personalSyncPolicy;
 
@@ -39,6 +47,7 @@ public class TransferSyncService {
         this.accountRepository = accountRepository;
         this.transferRepository = transferRepository;
         this.syncCommandService = syncCommandService;
+        this.tombstones = tombstones;
     }
 
     @Transactional
@@ -65,21 +74,10 @@ public class TransferSyncService {
             );
         }
 
-        BigDecimal amount = request.amount();
-        BigDecimal targetAmount = request.targetAmount();
-
-        SyncCreateTransferRequest normalized =
-            new SyncCreateTransferRequest(
-                syncId,
-                fromSyncId,
-                toSyncId,
-                amount == null ? null : amount.stripTrailingZeros(),
-                request.dateTime(),
-                request.description(),
-                targetAmount == null
-                    ? null
-                    : targetAmount.stripTrailingZeros()
-            );
+        var normalized = new SyncCreateTransferRequest(
+            syncId, fromSyncId, toSyncId, normalizeAmount(request.amount()),
+            request.dateTime(), request.description(), normalizeAmount(request.targetAmount())
+        );
 
         return syncCommandService.execute(
             currentUser.getId(),
@@ -88,23 +86,17 @@ public class TransferSyncService {
             normalized,
             HttpStatus.CREATED.value(),
             () -> {
-                var from = accountRepository.findOwnedBySyncId(
-                    fromSyncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Source account is unavailable for synchronization"
-                ));
+                if (tombstones.transferWasDeleted(currentUser.getId(), syncId)) {
+                    throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Transfer was deleted and cannot be recreated with the same sync ID"
+                    );
+                }
 
-                var to = accountRepository.findOwnedBySyncId(
-                    toSyncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Destination account is unavailable for synchronization"
-                ));
+                Account from = requireAccount(fromSyncId, currentUser, "Source");
+                Account to = requireAccount(toSyncId, currentUser, "Destination");
 
-                personalSyncPolicy.requirePrivateAccount(from);
-                personalSyncPolicy.requirePrivateAccount(to);
-
+                var accounts = new AccountVersionChanges(from, to);
                 TransferResult result =
                     transferService.executeTransferWithAmounts(
                         from.getAccount_id(),
@@ -113,7 +105,7 @@ public class TransferSyncService {
                         normalized.targetAmount(),
                         normalized.description(),
                         currentUser,
-                        syncId
+                        syncId, normalized.dateTime()
                     );
 
                 requireSuccess(result);
@@ -123,24 +115,115 @@ public class TransferSyncService {
                         "Created transfer was not found"
                     ));
 
-                saved.setDateTime(normalized.dateTime());
-
-                return new TransferResponse(
-                    saved.getId(),
-                    saved.getFromAccount().getAccount_id(),
-                    saved.getFromAccount().getName(),
-                    saved.getToAccount().getAccount_id(),
-                    saved.getToAccount().getName(),
-                    saved.getAmount(),
-                    saved.getDateTime(),
-                    saved.getDescription(),
-                    saved.getSyncId(),
-                    saved.getTargetAmount(),
-                    saved.getSourceCurrencyCode(),
-                    saved.getTargetCurrencyCode()
+                transferRepository.flush();
+                return syncCommandService.withAccountVersionChanges(
+                    TransferResponse.from(saved), accounts
                 );
             }
         );
+    }
+
+    @Transactional
+    public CompletedCommand updateTransfer(
+            UUID commandId, SyncUpdateTransferRequest request, User currentUser) {
+        requireVersionedTarget(request.syncId(), request.expectedVersion());
+        if (request.fromAccountSyncId() == null || request.toAccountSyncId() == null
+                || request.dateTime() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, "Account sync IDs and date and time are required"
+            );
+        }
+
+        var normalized = new SyncUpdateTransferRequest(
+            request.syncId(), request.expectedVersion(), request.fromAccountSyncId(),
+            request.toAccountSyncId(), normalizeAmount(request.amount()), request.dateTime(),
+            request.description(), normalizeAmount(request.targetAmount())
+        );
+        return syncCommandService.execute(
+            currentUser.getId(), commandId, "UPDATE_TRANSFER", normalized, HttpStatus.OK.value(),
+            () -> {
+                Transfer transfer = requireOwnedTransfer(
+                    normalized.syncId(), normalized.expectedVersion(), currentUser
+                );
+                Account from = requireAccount(normalized.fromAccountSyncId(), currentUser, "Source");
+                Account to = requireAccount(normalized.toAccountSyncId(), currentUser, "Destination");
+                if ((from.getArchivedAt() != null && !from.getAccount_id().equals(transfer.getFromAccount().getAccount_id()))
+                        || (to.getArchivedAt() != null && !to.getAccount_id().equals(transfer.getToAccount().getAccount_id()))) {
+                    throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "New transfer accounts must be active"
+                    );
+                }
+
+                var accounts = new AccountVersionChanges(
+                    transfer.getFromAccount(), transfer.getToAccount(), from, to
+                );
+                requireSuccess(transferService.updateTransfer(
+                    transfer, from, to, normalized.amount(), normalized.targetAmount(),
+                    normalized.dateTime(), normalized.description()
+                ));
+                transferRepository.flush();
+                return syncCommandService.withAccountVersionChanges(
+                    TransferResponse.from(transfer), accounts
+                );
+            }
+        );
+    }
+
+    @Transactional
+    public CompletedCommand deleteTransfer(
+            UUID commandId, SyncDeleteTransferRequest request, User currentUser) {
+        requireVersionedTarget(request.syncId(), request.expectedVersion());
+        return syncCommandService.execute(
+            currentUser.getId(), commandId, "DELETE_TRANSFER", request, HttpStatus.OK.value(),
+            () -> {
+                Transfer transfer = requireOwnedTransfer(
+                    request.syncId(), request.expectedVersion(), currentUser
+                );
+                var accounts = new AccountVersionChanges(transfer.getFromAccount(), transfer.getToAccount());
+                transferService.deleteTransfer(transfer);
+                transferRepository.flush();
+                tombstones.recordTransferDeletion(currentUser.getId(), request.syncId());
+                return syncCommandService.withAccountVersionChanges(
+                    new SyncDeleteResponse(request.syncId(), true), accounts
+                );
+            }
+        );
+    }
+
+    private Transfer requireOwnedTransfer(UUID syncId, Long expectedVersion, User currentUser) {
+        Transfer transfer = transferRepository.findOwnedBySyncId(syncId, currentUser)
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Transfer is unavailable for synchronization"
+            ));
+        personalSyncPolicy.requirePrivateAccount(transfer.getFromAccount());
+        personalSyncPolicy.requirePrivateAccount(transfer.getToAccount());
+        if (!expectedVersion.equals(transfer.getVersion())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "Transfer version conflict. Synchronize before retrying."
+            );
+        }
+        return transfer;
+    }
+
+    private Account requireAccount(UUID syncId, User currentUser, String side) {
+        Account account = accountRepository.findOwnedBySyncId(syncId, currentUser)
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, side + " account is unavailable for synchronization"
+            ));
+        personalSyncPolicy.requirePrivateAccount(account);
+        return account;
+    }
+
+    private void requireVersionedTarget(UUID syncId, Long expectedVersion) {
+        if (syncId == null || expectedVersion == null || expectedVersion < 0) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, "Transfer sync ID and a non-negative expected version are required"
+            );
+        }
+    }
+
+    private BigDecimal normalizeAmount(BigDecimal amount) {
+        return amount == null ? null : amount.stripTrailingZeros();
     }
 
     private void requireSuccess(TransferResult result) {
@@ -167,12 +250,12 @@ public class TransferSyncService {
             case INVALID_AMOUNT -> throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Amount must be greater than zero "
-                    + "and have at most two decimal places"
+                    + "and use the source currency precision"
             );
 
             case INVALID_TARGET_AMOUNT -> throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
-                "Destination amount must be positive, have at most two decimal places "
+                "Destination amount must be positive, use the destination currency precision "
                     + "and equal the source amount for same-currency transfers"
             );
         }

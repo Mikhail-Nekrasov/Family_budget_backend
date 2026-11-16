@@ -108,4 +108,35 @@ public class SyncTombstoneRepository {
 
         return count != null && count > 0;
     }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordTransferDeletion(Long userId, UUID syncId) {
+        jdbcTemplate.update(
+            """
+            INSERT INTO sync_tombstone (
+                user_id, entity_type, sync_id
+            )
+            VALUES (?, 'TRANSFER', ?)
+            """,
+            userId,
+            syncId
+        );
+    }
+
+    public boolean transferWasDeleted(Long userId, UUID syncId) {
+        Long count = jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(*)
+            FROM sync_tombstone
+            WHERE user_id = ?
+            AND entity_type = 'TRANSFER'
+            AND sync_id = ?
+            """,
+            Long.class,
+            userId,
+            syncId
+        );
+
+        return count != null && count > 0;
+    }
 }

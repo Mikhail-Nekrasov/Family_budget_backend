@@ -35,6 +35,7 @@ import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.*;
+import fi.haagahelia.accounting.service.RegistrationService;
 import fi.haagahelia.accounting.service.SyncDownloadService;
 
 @SpringBootTest
@@ -43,6 +44,7 @@ import fi.haagahelia.accounting.service.SyncDownloadService;
 @Import(PostgresTestConfig.class)
 class PostgresSyncDownloadIntegrationTest {
     @Autowired private SyncDownloadService downloads;
+    @Autowired private RegistrationService registration;
     @Autowired private SyncDownloadRepository downloadRepository;
     @Autowired private UserRepository users;
     @Autowired private AccountRepository accounts;
@@ -84,6 +86,24 @@ class PostgresSyncDownloadIntegrationTest {
             jdbc.update("DELETE FROM sync_tombstone WHERE user_id IN (?, ?)", owner.getId(), other.getId());
             jdbc.update("DELETE FROM users WHERE id IN (?, ?)", owner.getId(), other.getId());
         });
+    }
+
+    @Test
+    void firstFullDownloadForNewRegistrationIsEmpty() {
+        User registered = registration.register(
+            "new_budget_" + UUID.randomUUID(), "test-password", "test-password"
+        );
+        try {
+            var download = downloads.start(null, registered);
+            assertEquals("FULL", download.mode());
+            assertEquals(0L, download.itemCount());
+            var page = downloads.page(download.downloadId(), 0, registered);
+            assertTrue(page.items().isEmpty());
+            assertNull(page.nextAfter());
+            assertEquals(download.downloadId(), page.nextCursor());
+        } finally {
+            users.deleteById(registered.getId());
+        }
     }
 
     private List<SyncDownloadItem> all(UUID id) {

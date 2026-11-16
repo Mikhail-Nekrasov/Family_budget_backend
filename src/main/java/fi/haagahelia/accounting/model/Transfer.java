@@ -37,6 +37,9 @@ public class Transfer {
     @Column(name = "target_currency_code", nullable = false, length = 3)
     private String targetCurrencyCode;
 
+    @Version
+    private Long version;
+
     private LocalDateTime dateTime;
     private String description;
 
@@ -55,11 +58,18 @@ public class Transfer {
 
     // probably this view is more comfortable to read?
     public Long getId() { return id; }
+    public Long getVersion() { return version; }
     public UUID getSyncId() { return syncId; }
     public Account getFromAccount() { return fromAccount; }
-    public void setFromAccount(Account fromAccount) { this.fromAccount = fromAccount; }
+    public void setFromAccount(Account fromAccount) {
+        this.fromAccount = fromAccount;
+        this.sourceCurrencyCode = fromAccount.getCurrencyCode();
+    }
     public Account getToAccount() { return toAccount; }
-    public void setToAccount(Account toAccount) { this.toAccount = toAccount; }
+    public void setToAccount(Account toAccount) {
+        this.toAccount = toAccount;
+        this.targetCurrencyCode = toAccount.getCurrencyCode();
+    }
     public BigDecimal getAmount() { return amount; }
     public void setAmount(BigDecimal amount) { this.amount = amount; }
     public String getDescription() { return description; }

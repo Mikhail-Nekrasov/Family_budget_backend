@@ -136,6 +136,24 @@ class AccountApiIntegrationTest {
     }
 
     @Test
+    void rejectsFractionalOpeningBalanceForJpy() throws Exception {
+        User owner = createUser("api_fractional_jpy_account");
+
+        mockMvc.perform(post("/api/accounts")
+                .with(user(owner.getUsername()))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"name":"Cash","currencyCode":"JPY","amount":100.01}
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message")
+                .value("Amount must be a whole number for this currency"));
+
+        assertEquals(0, accountRepository.findByUser(owner).size());
+    }
+
+    @Test
     void rejectsBlankAccountNameWithoutSaving() throws Exception {
         User owner = createUser("api_invalid_account_owner");
 

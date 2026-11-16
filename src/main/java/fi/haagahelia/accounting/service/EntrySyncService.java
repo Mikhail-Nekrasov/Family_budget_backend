@@ -114,9 +114,10 @@ public class EntrySyncService {
                     syncId
                 );
 
-                return entryService.createEntryFromRequest(
-                    entryRequest, currentUser
-                );
+                var accounts = new AccountVersionChanges(account);
+                var response = entryService.createEntryFromRequest(entryRequest, currentUser);
+                entryRepository.flush();
+                return syncCommandService.withAccountVersionChanges(response, accounts);
             }
         );
     }
@@ -211,11 +212,11 @@ public class EntrySyncService {
                     category.getCategory_id()
                 );
 
-                return entryService.updateEntryFromRequest(
-                    existing.getId(),
-                    updateRequest,
-                    currentUser
+                var accounts = new AccountVersionChanges(existing.getAccount(), account);
+                var response = entryService.updateEntryFromRequest(
+                    existing.getId(), updateRequest, currentUser
                 );
+                return syncCommandService.withAccountVersionChanges(response, accounts);
             }
         );
     }
@@ -266,13 +267,14 @@ public class EntrySyncService {
                     );
                 }
 
-                entryService.deleteEntry(
-                    existing.getId(), currentUser
-                );
+                var accounts = new AccountVersionChanges(existing.getAccount());
+                entryService.deleteEntry(existing.getId(), currentUser);
 
                 entryRepository.flush();
 
-                return new SyncDeleteResponse(syncId, true);
+                return syncCommandService.withAccountVersionChanges(
+                    new SyncDeleteResponse(syncId, true), accounts
+                );
             }
         );
     }

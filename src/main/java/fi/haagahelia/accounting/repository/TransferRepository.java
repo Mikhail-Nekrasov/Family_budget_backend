@@ -50,4 +50,11 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
         WHERE t.syncId = :syncId
         """)
     Optional<Transfer> findBySyncId(@Param("syncId") UUID syncId);
+
+    @Query("""
+        SELECT t FROM Transfer t
+        WHERE t.syncId = :syncId
+          AND t.fromAccount.user = :user AND t.toAccount.user = :user
+        """)
+    Optional<Transfer> findOwnedBySyncId(@Param("syncId") UUID syncId, @Param("user") User user);
 }

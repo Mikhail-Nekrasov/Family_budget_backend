@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.CreateCategoryRequest;
 import fi.haagahelia.accounting.api.dto.SyncDeleteCategoryRequest;
+import fi.haagahelia.accounting.api.dto.SyncUpdateCategoryRequest;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedCommand;
 import fi.haagahelia.accounting.repository.UserRepository;
@@ -41,39 +43,46 @@ public class CategorySyncRestController {
             @RequestBody CreateCategoryRequest request,
             Authentication auth) {
 
-        User currentUser = userRepository.findByUsername(
-            auth.getName()
-        );
-
-        if (currentUser == null) {
-            throw new ResponseStatusException(
-                HttpStatus.UNAUTHORIZED,
-                "User not found"
-            );
-        }
-
-        CompletedCommand result = categorySyncService.createCategory(
-            commandId, request, currentUser
-        );
-
-        return ResponseEntity
-            .status(result.responseStatus())
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(result.responseBody());
+        return response(categorySyncService.createCategory(
+            commandId, request, requireUser(auth)
+        ));
     }
+
+    @PutMapping
+    public ResponseEntity<String> updateCategory(
+            @PathVariable("commandId") UUID commandId,
+            @RequestBody SyncUpdateCategoryRequest request,
+            Authentication auth) {
+
+        return response(categorySyncService.updateCategory(
+            commandId, request, requireUser(auth)
+        ));
+    }
+
     @PostMapping("/delete")
     public ResponseEntity<String> deleteCategory(
             @PathVariable("commandId") UUID commandId,
             @RequestBody SyncDeleteCategoryRequest request,
             Authentication auth) {
+
+        return response(categorySyncService.deleteCategory(
+            commandId, request, requireUser(auth)
+        ));
+    }
+
+    private User requireUser(Authentication auth) {
         User currentUser = userRepository.findByUsername(auth.getName());
         if (currentUser == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found");
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "User not found"
+            );
         }
-        CompletedCommand result = categorySyncService.deleteCategory(
-            commandId, request, currentUser
-        );
+        return currentUser;
+    }
+
+    private ResponseEntity<String> response(CompletedCommand result) {
         return ResponseEntity.status(result.responseStatus())
-            .contentType(MediaType.APPLICATION_JSON).body(result.responseBody());
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(result.responseBody());
     }
 }

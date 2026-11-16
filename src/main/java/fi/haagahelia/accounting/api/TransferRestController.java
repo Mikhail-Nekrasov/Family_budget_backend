@@ -119,13 +119,13 @@ public class TransferRestController {
                 throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Amount must be greater than zero "
-                        + "and have at most two decimal places"
+                        + "and use the source currency precision"
                 );
 
             case INVALID_TARGET_AMOUNT ->
                 throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Destination amount must be positive, have at most two decimal places "
+                    "Destination amount must be positive, use the destination currency precision "
                         + "and equal the source amount for same-currency transfers"
                 );
         };

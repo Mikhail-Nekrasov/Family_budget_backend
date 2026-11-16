@@ -93,6 +93,7 @@ class PostgresEntrySyncIntegrationTest {
         UUID syncId = UUID.randomUUID();
 
         long entriesBefore = entryRepository.count();
+        long accountVersion = account.getVersion();
 
         String requestBody = """
             {
@@ -121,6 +122,10 @@ class PostgresEntrySyncIntegrationTest {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.syncId").value(syncId.toString()))
             .andExpect(jsonPath("$.amount").value(25))
+            .andExpect(jsonPath("$.accountVersionChanges.length()").value(1))
+            .andExpect(jsonPath("$.accountVersionChanges[0].accountSyncId").value(account.getSyncId().toString()))
+            .andExpect(jsonPath("$.accountVersionChanges[0].previousVersion").value(accountVersion))
+            .andExpect(jsonPath("$.accountVersionChanges[0].version").value(accountVersion + 1))
             .andExpect(jsonPath("$.accountId")
                 .value(account.getAccount_id().intValue()))
             .andExpect(jsonPath("$.categoryId")
@@ -187,6 +192,16 @@ class PostgresEntrySyncIntegrationTest {
                 commandId
             )
         );
+
+        mockMvc.perform(post("/api/sync/accounts/{commandId}/archive-state", UUID.randomUUID())
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"syncId":"%s","expectedVersion":%d,"archived":true}
+                    """.formatted(account.getSyncId(), accountVersion + 1)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.version").value(accountVersion + 2))
+            .andExpect(jsonPath("$.archivedAt").isNotEmpty());
     }
 
     @Test
@@ -306,6 +321,7 @@ class PostgresEntrySyncIntegrationTest {
 
         UUID commandId = UUID.randomUUID();
         Long originalVersion = original.getVersion();
+        long accountVersion = account.getVersion();
         long entriesBefore = entryRepository.count();
 
         String requestBody = """
@@ -338,6 +354,9 @@ class PostgresEntrySyncIntegrationTest {
             .andExpect(jsonPath("$.syncId")
                 .value(original.getSyncId().toString()))
             .andExpect(jsonPath("$.amount").value(40))
+            .andExpect(jsonPath("$.accountVersionChanges.length()").value(1))
+            .andExpect(jsonPath("$.accountVersionChanges[0].previousVersion").value(accountVersion))
+            .andExpect(jsonPath("$.accountVersionChanges[0].version").value(accountVersion + 1))
             .andExpect(jsonPath("$.version")
                 .value(originalVersion.longValue() + 1))
             .andReturn()
@@ -435,6 +454,7 @@ class PostgresEntrySyncIntegrationTest {
         UUID commandId = UUID.randomUUID();
 
         long entriesBefore = entryRepository.count();
+        long accountVersion = account.getVersion();
 
         String requestBody = """
             {
@@ -456,6 +476,9 @@ class PostgresEntrySyncIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.syncId").value(syncId.toString()))
             .andExpect(jsonPath("$.deleted").value(true))
+            .andExpect(jsonPath("$.accountVersionChanges.length()").value(1))
+            .andExpect(jsonPath("$.accountVersionChanges[0].previousVersion").value(accountVersion))
+            .andExpect(jsonPath("$.accountVersionChanges[0].version").value(accountVersion + 1))
             .andReturn()
             .getResponse()
             .getContentAsString();
