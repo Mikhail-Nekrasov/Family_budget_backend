@@ -13,6 +13,7 @@ public record EntryVersionConflict(
 ) {
     public record ServerEntry(
         UUID syncId,
+        long id,
         long version,
         String title,
         EntryType type,

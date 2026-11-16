@@ -15,6 +15,7 @@ public class EntryVersionConflictException extends ResponseStatusException {
         var editor = entry.getLastEditedBy();
         serverEntry = new ServerEntry(
             entry.getSyncId(),
+            entry.getId(),
             entry.getVersion(),
             entry.getTitle(),
             entry.getType(),

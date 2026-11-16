@@ -607,7 +607,9 @@ class PostgresEntrySyncIntegrationTest {
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.message").value(
                 "Entry version conflict. Synchronize before retrying."
-            ));
+            ))
+            .andExpect(jsonPath("$.code").value("ENTRY_VERSION_CONFLICT"))
+            .andExpect(jsonPath("$.serverEntry.id").value(expense.getId()));
 
         Entry unchanged = entryRepository.findById(expense.getId())
             .orElseThrow();
