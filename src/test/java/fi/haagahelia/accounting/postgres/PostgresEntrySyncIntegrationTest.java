@@ -387,7 +387,13 @@ class PostgresEntrySyncIntegrationTest {
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.message").value(
                 "Entry version conflict. Synchronize before retrying."
-            ));
+            ))
+            .andExpect(jsonPath("$.code").value("ENTRY_VERSION_CONFLICT"))
+            .andExpect(jsonPath("$.serverEntry.syncId").value(original.getSyncId().toString()))
+            .andExpect(jsonPath("$.serverEntry.version").value(originalVersion + 1))
+            .andExpect(jsonPath("$.serverEntry.amount").value("40"))
+            .andExpect(jsonPath("$.serverEntry.lastEditedBy.id").value(owner.getId()))
+            .andExpect(jsonPath("$.serverEntry.lastEditedBy.username").value(owner.getUsername()));
 
         Entry updated = entryRepository.findById(original.getId())
             .orElseThrow();

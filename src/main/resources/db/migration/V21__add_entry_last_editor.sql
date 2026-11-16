@@ -1,0 +1,2 @@
+ALTER TABLE entry
+    ADD COLUMN last_edited_by BIGINT REFERENCES users(id) ON DELETE SET NULL;

@@ -13,10 +13,21 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.server.ResponseStatusException;
 
 import fi.haagahelia.accounting.api.dto.ApiError;
+import fi.haagahelia.accounting.api.dto.EntryVersionConflict;
+import fi.haagahelia.accounting.service.EntryVersionConflictException;
 
 @RestControllerAdvice(basePackages = "fi.haagahelia.accounting.api")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(EntryVersionConflictException.class)
+    public ResponseEntity<EntryVersionConflict> handleEntryVersionConflict(
+            EntryVersionConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new EntryVersionConflict(
+            HttpStatus.CONFLICT.value(), "ENTRY_VERSION_CONFLICT",
+            exception.getReason(), exception.getServerEntry()
+        ));
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiError> handleResponseStatus(

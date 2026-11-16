@@ -152,6 +152,7 @@ public class EntryService {
 
         Account account = entry.getAccount();
         entry.setUser(account.getUser());
+        entry.setLastEditedBy(currentUser);
         BigDecimal balance = account.getAmount() != null
             ? account.getAmount()
             : BigDecimal.ZERO;
@@ -235,6 +236,7 @@ public class EntryService {
         existingEntry.setCategory(entryFromForm.getCategory());
         existingEntry.setAccount(newAccount);
         existingEntry.setUser(newAccount.getUser());
+        existingEntry.setLastEditedBy(currentUser);
 
         entryRepository.save(existingEntry);
 

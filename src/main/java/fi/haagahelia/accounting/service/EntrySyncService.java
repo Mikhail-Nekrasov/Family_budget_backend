@@ -180,10 +180,7 @@ public class EntrySyncService {
                 personalSyncPolicy.requirePrivateAccount(existing.getAccount());
 
                 if (!expectedVersion.equals(existing.getVersion())) {
-                    throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Entry version conflict. Synchronize before retrying."
-                    );
+                    throw new EntryVersionConflictException(existing);
                 }
 
                 var account = accountRepository.findOwnedBySyncId(
