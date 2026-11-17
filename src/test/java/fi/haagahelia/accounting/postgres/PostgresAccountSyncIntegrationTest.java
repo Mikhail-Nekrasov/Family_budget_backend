@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -70,6 +71,38 @@ class PostgresAccountSyncIntegrationTest {
         user.setPassword("unused-in-this-test");
 
         owner = userRepository.saveAndFlush(user);
+    }
+
+    @Test
+    void preferencesSaveAppearanceAndReuseVersionedAccountOrder() throws Exception {
+        UUID first = accountRepository.saveAndFlush(new Account("Cash", BigDecimal.ZERO, "", owner)).getSyncId();
+        UUID second = accountRepository.saveAndFlush(new Account("Savings", BigDecimal.ZERO, "", owner)).getSyncId();
+        String colorKey = "account:" + first + ":color";
+        String hiddenKey = "account:" + first + ":hidden";
+        mockMvc.perform(get("/api/budget-preferences").with(user(owner.getUsername())))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value("0:0"));
+        mockMvc.perform(put("/api/budget-preferences").with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"revision":"0:0","settings":{"order:account":["%s","%s"],"%s":"#365BBC","%s":true}}
+                    """.formatted(second, first, colorKey, hiddenKey)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value("1:1"))
+            .andExpect(jsonPath("$.settings['%s']".formatted(colorKey)).value("#365BBC"))
+            .andExpect(jsonPath("$.settings['%s']".formatted(hiddenKey)).value(true));
+        mockMvc.perform(get("/api/account-order").with(user(owner.getUsername())))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.accountSyncIds[0]").value(second.toString()));
+        mockMvc.perform(put("/api/budget-preferences").with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"revision":"0:0","settings":{"%s":null}}
+                    """.formatted(colorKey)))
+            .andExpect(status().isConflict());
+        mockMvc.perform(put("/api/budget-preferences").with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"revision":"1:1","settings":{"%s":null}}
+                    """.formatted(colorKey)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.settings['%s']".formatted(colorKey)).hasJsonPath());
+        mockMvc.perform(get("/api/budget-preferences"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
