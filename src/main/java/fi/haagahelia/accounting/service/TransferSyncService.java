@@ -25,6 +25,7 @@ import fi.haagahelia.accounting.service.TransferService.TransferResult;
 @Service
 public class TransferSyncService {
 
+    private final SyncDependencyRecoveryService dependencies;
     private final PersonalSyncPolicy personalSyncPolicy;
 
     private final TransferService transferService;
@@ -39,9 +40,11 @@ public class TransferSyncService {
             TransferRepository transferRepository,
             SyncCommandService syncCommandService,
             PersonalSyncPolicy personalSyncPolicy,
-            SyncTombstoneRepository tombstones) {
+            SyncTombstoneRepository tombstones,
+            SyncDependencyRecoveryService dependencies) {
 
         this.personalSyncPolicy = personalSyncPolicy;
+        this.dependencies = dependencies;
 
         this.transferService = transferService;
         this.accountRepository = accountRepository;
@@ -207,8 +210,8 @@ public class TransferSyncService {
 
     private Account requireAccount(UUID syncId, User currentUser, String side) {
         Account account = accountRepository.findOwnedBySyncId(syncId, currentUser)
-            .orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, side + " account is unavailable for synchronization"
+            .orElseThrow(() -> dependencies.unavailable(
+                currentUser.getId(), "ACCOUNT", syncId, side + " account is unavailable for synchronization"
             ));
         personalSyncPolicy.requirePrivateAccount(account);
         return account;

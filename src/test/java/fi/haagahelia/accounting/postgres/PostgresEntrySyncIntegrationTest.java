@@ -86,6 +86,98 @@ class PostgresEntrySyncIntegrationTest {
     }
 
     @Test
+    void restoresLegacyCategoryAtSameSyncIdAndReplaysExpenseOnlyOnce() throws Exception {
+        UUID categorySyncId = category.getSyncId();
+        deleteFixture("/api/categories/{id}", category.getCategory_id());
+        jdbcTemplate.update("UPDATE sync_tombstone SET restore_snapshot = NULL WHERE sync_id = ?", categorySyncId);
+        UUID token = dependencyToken("CATEGORY", categorySyncId);
+        UUID command = UUID.randomUUID();
+        String entry = offlineExpense(account.getSyncId(), categorySyncId);
+
+        sendOfflineExpense(command, entry).andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("SYNC_DEPENDENCY_DELETED"))
+            .andExpect(jsonPath("$.dependency.restoreToken").value(token.toString()))
+            .andExpect(jsonPath("$.dependency.needsCategoryDetails").value(true));
+
+        String restore = """
+            {"entityType":"CATEGORY","syncId":"%s","restoreToken":"%s",
+             "categoryName":"Food","categoryType":"EXPENSE","categoryVersion":0}
+            """.formatted(categorySyncId, token);
+        restoreDependency(restore).andExpect(status().isOk())
+            .andExpect(jsonPath("$.syncId").value(categorySyncId.toString()))
+            .andExpect(jsonPath("$.version").value(1));
+        restoreDependency(restore).andExpect(status().isOk());
+        sendOfflineExpense(command, entry).andExpect(status().isCreated());
+        sendOfflineExpense(command, entry).andExpect(status().isCreated());
+        assertEquals(0, new BigDecimal("70").compareTo(jdbcTemplate.queryForObject(
+            "SELECT amount FROM account WHERE sync_id = ?", BigDecimal.class, account.getSyncId())));
+    }
+
+    @Test
+    void restoresDeletedAccountWithSavedBalanceAndRejectsOldRestoreTokenAfterAnotherDeletion() throws Exception {
+        UUID syncId = account.getSyncId();
+        deleteFixture("/api/accounts/{id}", account.getAccount_id());
+        UUID token = dependencyToken("ACCOUNT", syncId);
+        String entry = offlineExpense(syncId, category.getSyncId());
+        UUID command = UUID.randomUUID();
+
+        sendOfflineExpense(command, entry).andExpect(status().isConflict())
+            .andExpect(jsonPath("$.dependency.entityType").value("ACCOUNT"))
+            .andExpect(jsonPath("$.dependency.needsCategoryDetails").value(false));
+
+        String restore = """
+            {"entityType":"ACCOUNT","syncId":"%s","restoreToken":"%s"}
+            """.formatted(syncId, token);
+        restoreDependency(restore).andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(account.getAccount_id()))
+            .andExpect(jsonPath("$.version").value(1));
+        restoreDependency(restore).andExpect(status().isOk());
+        assertEquals(0, new BigDecimal("100").compareTo(jdbcTemplate.queryForObject(
+            "SELECT amount FROM account WHERE sync_id = ?", BigDecimal.class, syncId)));
+
+        deleteFixture("/api/accounts/{id}", account.getAccount_id());
+        restoreDependency(restore).andExpect(status().isConflict());
+        UUID secondToken = dependencyToken("ACCOUNT", syncId);
+        restoreDependency(restore.replace(token.toString(), secondToken.toString()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
+
+        sendOfflineExpense(command, entry).andExpect(status().isCreated());
+        assertEquals(0, new BigDecimal("70").compareTo(jdbcTemplate.queryForObject(
+            "SELECT amount FROM account WHERE sync_id = ?", BigDecimal.class, syncId)));
+    }
+
+    private void deleteFixture(String path, Long id) throws Exception {
+        mockMvc.perform(delete(path, id).with(user(owner.getUsername())).with(csrf()))
+            .andExpect(status().isNoContent());
+        entryRepository.flush();
+    }
+
+    private UUID dependencyToken(String entityType, UUID id) {
+        return jdbcTemplate.queryForObject(
+            "SELECT restore_token FROM sync_tombstone WHERE user_id = ? AND entity_type = ? AND sync_id = ?",
+            UUID.class, owner.getId(), entityType, id);
+    }
+
+    private String offlineExpense(UUID accountId, UUID categoryId) {
+        return """
+            {"syncId":"%s","title":"Offline expense","type":"EXPENSE","amount":30,
+             "dateTime":"2026-10-19T12:00:00","accountSyncId":"%s","categorySyncId":"%s"}
+            """.formatted(UUID.randomUUID(), accountId, categoryId);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions sendOfflineExpense(UUID id, String entry)
+            throws Exception {
+        return mockMvc.perform(post("/api/sync/entries/{commandId}", id).with(user(owner.getUsername()))
+            .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(entry));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions restoreDependency(String request)
+            throws Exception {
+        return mockMvc.perform(post("/api/sync/dependencies/restore").with(user(owner.getUsername()))
+            .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(request));
+    }
+
+    @Test
     void repeatedExpenseReturnsSameResponseAndChargesOnlyOnce()
             throws Exception {
 

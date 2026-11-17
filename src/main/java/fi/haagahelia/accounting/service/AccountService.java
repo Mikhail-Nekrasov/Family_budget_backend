@@ -143,11 +143,10 @@ public class AccountService {
             return false;
         }
 
-        accountRepository.deleteById(id);
-
         syncTombstoneRepository.recordAccountDeletion(
             currentUser.getId(), account.getSyncId()
         );
+        accountRepository.deleteById(id);
 
         return true;
     }

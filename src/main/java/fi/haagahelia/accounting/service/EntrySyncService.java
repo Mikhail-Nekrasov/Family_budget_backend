@@ -24,6 +24,7 @@ import fi.haagahelia.accounting.model.User;
 @Service
 public class EntrySyncService {
 
+    private final SyncDependencyRecoveryService dependencies;
     private final PersonalSyncPolicy personalSyncPolicy;
 
     private final EntryService entryService;
@@ -40,9 +41,10 @@ public class EntrySyncService {
             SyncCommandService syncCommandService,
             EntryRepository entryRepository,
             SyncTombstoneRepository tombstones,
-            PersonalSyncPolicy personalSyncPolicy) {
+            PersonalSyncPolicy personalSyncPolicy, SyncDependencyRecoveryService dependencies) {
 
         this.personalSyncPolicy = personalSyncPolicy;
+        this.dependencies = dependencies;
 
         this.entryService = entryService;
         this.accountRepository = accountRepository;
@@ -93,18 +95,16 @@ public class EntrySyncService {
             () -> {
                 var account = accountRepository.findOwnedBySyncId(
                     accountSyncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Account is unavailable for synchronization"
+                ).orElseThrow(() -> dependencies.unavailable(
+                    currentUser.getId(), "ACCOUNT", accountSyncId, "Account is unavailable for synchronization"
                 ));
 
                 personalSyncPolicy.requirePrivateAccount(account);
 
                 var category = categoryRepository.findOwnedBySyncId(
                     categorySyncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Category is unavailable for synchronization"
+                ).orElseThrow(() -> dependencies.unavailable(
+                    currentUser.getId(), "CATEGORY", categorySyncId, "Category is unavailable for synchronization"
                 ));
 
                 CreateEntryRequest entryRequest = new CreateEntryRequest(
@@ -191,18 +191,16 @@ public class EntrySyncService {
 
                 var account = accountRepository.findOwnedBySyncId(
                     accountSyncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Account is unavailable for synchronization"
+                ).orElseThrow(() -> dependencies.unavailable(
+                    currentUser.getId(), "ACCOUNT", accountSyncId, "Account is unavailable for synchronization"
                 ));
 
                 personalSyncPolicy.requirePrivateAccount(account);
 
                 var category = categoryRepository.findOwnedBySyncId(
                     categorySyncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Category is unavailable for synchronization"
+                ).orElseThrow(() -> dependencies.unavailable(
+                    currentUser.getId(), "CATEGORY", categorySyncId, "Category is unavailable for synchronization"
                 ));
 
                 UpdateEntryRequest updateRequest = new UpdateEntryRequest(

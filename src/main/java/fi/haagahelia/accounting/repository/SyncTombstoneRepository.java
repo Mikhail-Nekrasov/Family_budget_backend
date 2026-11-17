@@ -49,16 +49,22 @@ public class SyncTombstoneRepository {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void recordAccountDeletion(Long userId, UUID syncId) {
-        jdbcTemplate.update(
-            """
-            INSERT INTO sync_tombstone (
-                user_id, entity_type, sync_id
-            )
-            VALUES (?, 'ACCOUNT', ?)
-            """,
-            userId,
-            syncId
-        );
+        recordRestorableDeletion(userId, "ACCOUNT", syncId);
+    }
+
+    private void recordRestorableDeletion(Long userId, String type, UUID syncId) {
+        UUID token = UUID.randomUUID();
+        int updated = jdbcTemplate.update("""
+            UPDATE sync_tombstone SET deleted_at = CURRENT_TIMESTAMP, restore_token = ?,
+                restore_snapshot = NULL, restored = FALSE
+            WHERE user_id = ? AND entity_type = ? AND sync_id = ?
+            """, token, userId, type, syncId);
+        if (updated == 0) {
+            jdbcTemplate.update("""
+                INSERT INTO sync_tombstone (user_id, entity_type, sync_id, restore_token)
+                VALUES (?, ?, ?, ?)
+                """, userId, type, syncId, token);
+        }
     }
 
     public boolean accountWasDeleted(Long userId, UUID syncId) {
@@ -80,16 +86,7 @@ public class SyncTombstoneRepository {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void recordCategoryDeletion(Long userId, UUID syncId) {
-        jdbcTemplate.update(
-            """
-            INSERT INTO sync_tombstone (
-                user_id, entity_type, sync_id
-            )
-            VALUES (?, 'CATEGORY', ?)
-            """,
-            userId,
-            syncId
-        );
+        recordRestorableDeletion(userId, "CATEGORY", syncId);
     }
 
     public boolean categoryWasDeleted(Long userId, UUID syncId) {

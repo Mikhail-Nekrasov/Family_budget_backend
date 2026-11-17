@@ -93,11 +93,10 @@ public class CategoryService {
             );
         }
 
-        categoryRepository.deleteById(id);
-
         syncTombstoneRepository.recordCategoryDeletion(
             currentUser.getId(), category.getSyncId()
         );
+        categoryRepository.deleteById(id);
     }
 
     @Transactional(readOnly = true)

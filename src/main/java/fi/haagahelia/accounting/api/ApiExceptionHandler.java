@@ -1,4 +1,5 @@
 package fi.haagahelia.accounting.api;
+import java.util.Map;
 
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -15,10 +16,21 @@ import org.springframework.web.server.ResponseStatusException;
 import fi.haagahelia.accounting.api.dto.ApiError;
 import fi.haagahelia.accounting.api.dto.EntryVersionConflict;
 import fi.haagahelia.accounting.service.EntryVersionConflictException;
+import fi.haagahelia.accounting.service.DeletedSyncDependencyException;
 
 @RestControllerAdvice(basePackages = "fi.haagahelia.accounting.api")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(DeletedSyncDependencyException.class)
+    public ResponseEntity<Map<String, Object>> handleDeletedDependency(DeletedSyncDependencyException exception) {
+        return ResponseEntity.status(exception.getStatusCode()).body(Map.of(
+            "status", exception.getStatusCode().value(),
+            "code", "SYNC_DEPENDENCY_DELETED",
+            "message", exception.getReason(),
+            "dependency", exception.getDependency()
+        ));
+    }
 
     @ExceptionHandler(EntryVersionConflictException.class)
     public ResponseEntity<EntryVersionConflict> handleEntryVersionConflict(

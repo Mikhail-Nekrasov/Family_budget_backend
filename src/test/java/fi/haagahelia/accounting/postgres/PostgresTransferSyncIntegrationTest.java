@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -51,6 +52,41 @@ class PostgresTransferSyncIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Test
+    void restoresBothDeletedAccountsBeforeApplyingCrossCurrencyTransferOnce() throws Exception {
+        User owner = saveUser("restore_transfer_owner");
+        Account source = saveAccount(owner, "Cash", "EUR", "100.00");
+        Account destination = saveAccount(owner, "Yen", "JPY", "5000");
+        UUID command = UUID.randomUUID();
+        String body = transferBody(UUID.randomUUID(), source, destination, "20.25", "3000", null);
+
+        for (Account account : new Account[] {source, destination}) {
+            mockMvc.perform(delete("/api/accounts/{id}", account.getAccount_id())
+                    .with(user(owner.getUsername())).with(csrf()))
+                .andExpect(status().isNoContent());
+        }
+        accountRepository.flush();
+        for (Account account : new Account[] {source, destination}) {
+            UUID syncId = account.getSyncId();
+            send(owner, post("/api/sync/transfers/{commandId}", command), body)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SYNC_DEPENDENCY_DELETED"))
+                .andExpect(jsonPath("$.dependency.syncId").value(syncId.toString()));
+            UUID token = jdbc.queryForObject(
+                "SELECT restore_token FROM sync_tombstone WHERE user_id = ? AND entity_type = 'ACCOUNT' AND sync_id = ?",
+                UUID.class, owner.getId(), syncId);
+            send(owner, post("/api/sync/dependencies/restore"), """
+                {"entityType":"ACCOUNT","syncId":"%s","restoreToken":"%s"}
+                """.formatted(syncId, token)).andExpect(status().isOk());
+        }
+        send(owner, post("/api/sync/transfers/{commandId}", command), body)
+            .andExpect(status().isCreated());
+        send(owner, post("/api/sync/transfers/{commandId}", command), body)
+            .andExpect(status().isCreated());
+        assertBalance(source, "79.75");
+        assertBalance(destination, "8000");
+    }
 
     @Test
     void repeatedTransferMovesMoneyOnceAndPreservesClientDate()
