@@ -12,16 +12,23 @@ import org.springframework.web.server.ResponseStatusException;
 import fi.haagahelia.accounting.model.EntryType;
 import fi.haagahelia.accounting.repository.SyncCommandRepository;
 import fi.haagahelia.accounting.service.DeletedSyncDependencyException.Dependency;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import tools.jackson.databind.json.JsonMapper;
 
 @Service
 public class SyncDependencyRecoveryService {
     private static final long MAX_SAFE_VERSION = 9_007_199_254_740_989L;
     private final JdbcTemplate jdbc;
     private final SyncCommandRepository commands;
+    private final JsonMapper jsonMapper;
+    @PersistenceContext
+    private EntityManager entityManager;
 
-    public SyncDependencyRecoveryService(JdbcTemplate jdbc, SyncCommandRepository commands) {
+    public SyncDependencyRecoveryService(JdbcTemplate jdbc, SyncCommandRepository commands, JsonMapper jsonMapper) {
         this.jdbc = jdbc;
         this.commands = commands;
+        this.jsonMapper = jsonMapper;
     }
 
     private record Deletion(UUID token, String snapshot, boolean restored) {}
@@ -99,6 +106,44 @@ public class SyncDependencyRecoveryService {
             INSERT INTO category (name, type, user_id, sync_id, version)
             VALUES (?, ?, ?, ?, ?)
             """, name, request.categoryType().name(), ownerId, request.syncId(), version + 1);
+    }
+
+    RestoredDependency restoreEditedDependency(long ownerId, String type, UUID syncId, long expectedVersion) {
+        Deletion row = deletion(ownerId, type, syncId, true)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                type.equals("ACCOUNT") ? "Account is unavailable for synchronization"
+                    : "Category is unavailable for synchronization"));
+        nextRestoreVersion(row, expectedVersion, null);
+        return restore(ownerId, new RestoreRequest(type, syncId, row.token(), null, null, null));
+    }
+
+    long nextRestoreVersion(long ownerId, String type, UUID syncId, long expectedVersion, EntryType entryType) {
+        return nextRestoreVersion(deletion(ownerId, type, syncId, true).orElse(null), expectedVersion, entryType);
+    }
+
+    private long nextRestoreVersion(Deletion deletion, long expectedVersion, EntryType entryType) {
+        if (deletion != null && !deletion.restored() && deletion.snapshot() != null) {
+            var snapshot = jsonMapper.readTree(deletion.snapshot());
+            var version = snapshot.path("version");
+            if (version.isIntegralNumber() && version.longValue() == expectedVersion
+                    && expectedVersion < MAX_SAFE_VERSION
+                    && (entryType == null || entryType.name().equals(snapshot.path("type").asString()))) {
+                return expectedVersion + 1;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.GONE,
+            "The server deleted this operation and its previous version cannot be restored automatically");
+    }
+
+    void finishFinancialRestore(long ownerId, String type, UUID syncId, long version, Object operation) {
+        String table = "ENTRY".equals(type) ? "entry" : "transfer";
+        int updated = jdbc.update("UPDATE " + table + " SET version = ? WHERE sync_id = ?", version, syncId);
+        if (updated != 1) throw new IllegalStateException("Restored operation was not found");
+        entityManager.refresh(operation);
+        jdbc.update("""
+            UPDATE sync_tombstone SET restored = TRUE
+            WHERE user_id = ? AND entity_type = ? AND sync_id = ?
+            """, ownerId, type, syncId);
     }
 
     private Optional<Deletion> deletion(long ownerId, String type, UUID syncId, boolean lock) {

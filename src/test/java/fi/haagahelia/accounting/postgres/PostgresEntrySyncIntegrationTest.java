@@ -594,6 +594,12 @@ class PostgresEntrySyncIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(content().string(firstResponse));
 
+        mockMvc.perform(post("/api/sync/entries/{commandId}/delete", UUID.randomUUID())
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(requestBody))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.deleted").value(true));
+
+
         assertEquals(entriesBefore - 1, entryRepository.count());
 
         assertEquals(
@@ -865,12 +871,12 @@ class PostgresEntrySyncIntegrationTest {
                     .with(csrf())
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""
-                        {"syncId":"%s","expectedVersion":0,"title":"Edited expense","type":"EXPENSE",
+                        {"syncId":"%s","expectedVersion":1,"title":"Edited expense","type":"EXPENSE",
                          "amount":30,"dateTime":"2026-10-19T12:00:00","accountSyncId":"%s","categorySyncId":"%s"}
                         """.formatted(syncId, account.getSyncId(), category.getSyncId()))
             )
             .andExpect(status().isGone())
-            .andExpect(jsonPath("$.message").value("Entry was deleted on the server"));
+            .andExpect(jsonPath("$.message").value("The server deleted this operation and its previous version cannot be restored automatically"));
 
         UUID createCommandId = UUID.randomUUID();
 
@@ -932,5 +938,23 @@ class PostgresEntrySyncIntegrationTest {
                 createCommandId
             )
         );
+
+        UUID updateCommand = UUID.randomUUID();
+        String edit = """
+            {"syncId":"%s","expectedVersion":0,"title":"Edited expense","type":"EXPENSE",
+             "amount":30,"dateTime":"2026-10-19T12:00:00","accountSyncId":"%s","categorySyncId":"%s"}
+            """.formatted(syncId, account.getSyncId(), category.getSyncId());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mockMvc.perform(put("/api/sync/entries/{commandId}", updateCommand)
+                    .with(user(owner.getUsername())).with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON).content(edit))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.syncId").value(syncId.toString()))
+                .andExpect(jsonPath("$.version").value(1));
+        }
+        assertEquals(1L, jdbcTemplate.queryForObject("SELECT version FROM entry WHERE sync_id = ?", Long.class, syncId));
+        assertEquals(0, new BigDecimal("70.00").compareTo(
+            jdbcTemplate.queryForObject("SELECT amount FROM account WHERE account_id = ?", BigDecimal.class,
+                account.getAccount_id())));
     }
 }

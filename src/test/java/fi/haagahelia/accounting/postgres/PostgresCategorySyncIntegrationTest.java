@@ -279,6 +279,12 @@ class PostgresCategorySyncIntegrationTest {
                 .with(user(owner.getUsername())).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isOk()).andExpect(content().string(response));
+
+        mockMvc.perform(post("/api/sync/categories/{commandId}/delete", UUID.randomUUID())
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.deleted").value(true));
+
         assertEquals(0L, jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM category WHERE sync_id = ?", Long.class, category.getSyncId()));
         assertEquals(1L, jdbcTemplate.queryForObject(
@@ -357,6 +363,20 @@ class PostgresCategorySyncIntegrationTest {
         assertEquals(0L, jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM sync_command WHERE user_id = ? AND command_id = ?",
             Long.class, owner.getId(), commandId));
+    }
+
+    @Test
+    void offlineRenameRestoresDeletedCategoryWithOriginalSyncId() throws Exception {
+        Category category = categoryRepository.saveAndFlush(new Category("Old name", EntryType.INCOME, owner));
+        long version = category.getVersion();
+        categoryService.deleteCategory(category.getCategory_id(), owner);
+        categoryRepository.flush();
+
+        renameCategory(category, UUID.randomUUID(), version, "Local rename")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.syncId").value(category.getSyncId().toString()))
+            .andExpect(jsonPath("$.name").value("Local rename"))
+            .andExpect(jsonPath("$.type").value("INCOME"));
     }
 
     @Test

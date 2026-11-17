@@ -18,11 +18,14 @@ import fi.haagahelia.accounting.api.dto.SyncUpdateAccountRequest;
 import fi.haagahelia.accounting.model.Account;
 import fi.haagahelia.accounting.model.User;
 import fi.haagahelia.accounting.repository.AccountRepository;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedCommand;
 
 @Service
 public class AccountSyncService {
 
+    private final SyncTombstoneRepository tombstones;
+    private final SyncDependencyRecoveryService dependencies;
     private final PersonalSyncPolicy personalSyncPolicy;
 
     private final AccountService accountService;
@@ -33,8 +36,12 @@ public class AccountSyncService {
             AccountService accountService,
             SyncCommandService syncCommandService,
             AccountRepository accountRepository,
-            PersonalSyncPolicy personalSyncPolicy) {
+            PersonalSyncPolicy personalSyncPolicy,
+            SyncTombstoneRepository tombstones,
+            SyncDependencyRecoveryService dependencies) {
 
+        this.tombstones = tombstones;
+        this.dependencies = dependencies;
         this.personalSyncPolicy = personalSyncPolicy;
 
         this.accountService = accountService;
@@ -140,21 +147,7 @@ public class AccountSyncService {
             request,
             HttpStatus.OK.value(),
             () -> {
-                var account = accountRepository.findOwnedBySyncId(
-                    syncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Account is unavailable for synchronization"
-                ));
-
-                personalSyncPolicy.requirePrivateAccount(account);
-
-                if (!expectedVersion.equals(account.getVersion())) {
-                    throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Account version conflict. Synchronize before retrying."
-                    );
-                }
+                Account account = findAccountForEdit(syncId, expectedVersion, currentUser);
 
                 if (request.name() == null || request.name().isBlank()) {
                     throw new ResponseStatusException(
@@ -236,20 +229,7 @@ public class AccountSyncService {
             request,
             HttpStatus.OK.value(),
             () -> {
-                Account account = accountRepository.findOwnedBySyncId(
-                    syncId,
-                    currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Account is unavailable for synchronization"
-                ));
-
-                if (!expectedVersion.equals(account.getVersion())) {
-                    throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Account version conflict. Synchronize before retrying."
-                    );
-                }
+                Account account = findAccountForEdit(syncId, expectedVersion, currentUser);
 
                 boolean currentlyArchived = account.getArchivedAt() != null;
 
@@ -274,6 +254,21 @@ public class AccountSyncService {
                 );
             }
         );
+    }
+
+    private Account findAccountForEdit(UUID syncId, Long expectedVersion, User currentUser) {
+        var existing = accountRepository.findOwnedBySyncId(syncId, currentUser);
+        if (existing.isEmpty()) {
+            var restored = dependencies.restoreEditedDependency(currentUser.getId(), "ACCOUNT", syncId, expectedVersion);
+            return accountRepository.findById(restored.id()).orElseThrow();
+        }
+        Account account = existing.get();
+        personalSyncPolicy.requirePrivateAccount(account);
+        if (!expectedVersion.equals(account.getVersion())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Account version conflict. Synchronize before retrying.");
+        }
+        return account;
     }
 
     @Transactional
@@ -308,10 +303,15 @@ public class AccountSyncService {
             () -> {
                 Account account = accountRepository.findOwnedBySyncId(
                     syncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Account is unavailable for synchronization"
-                ));
+                ).orElse(null);
+                if (account == null) {
+                    if (tombstones.accountWasDeleted(currentUser.getId(), syncId)) {
+                        return new SyncDeleteResponse(syncId, true);
+                    }
+                    throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Account is unavailable for synchronization"
+                    );
+                }
 
                 personalSyncPolicy.requirePrivateAccount(account);
 

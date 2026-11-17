@@ -15,11 +15,14 @@ import fi.haagahelia.accounting.api.dto.SyncUpdateCategoryRequest;
 import fi.haagahelia.accounting.repository.CategoryRepository;
 import fi.haagahelia.accounting.model.Category;
 import fi.haagahelia.accounting.model.User;
+import fi.haagahelia.accounting.repository.SyncTombstoneRepository;
 import fi.haagahelia.accounting.repository.SyncCommandRepository.CompletedCommand;
 
 @Service
 public class CategorySyncService {
 
+    private final SyncTombstoneRepository tombstones;
+    private final SyncDependencyRecoveryService dependencies;
     private final CategoryRepository categoryRepository;
     private final CategoryService categoryService;
     private final SyncCommandService syncCommandService;
@@ -27,8 +30,12 @@ public class CategorySyncService {
     public CategorySyncService(
             CategoryService categoryService,
             SyncCommandService syncCommandService,
-            CategoryRepository categoryRepository) {
+            CategoryRepository categoryRepository,
+            SyncTombstoneRepository tombstones,
+            SyncDependencyRecoveryService dependencies) {
 
+        this.tombstones = tombstones;
+        this.dependencies = dependencies;
         this.categoryRepository = categoryRepository;
 
         this.categoryService = categoryService;
@@ -111,9 +118,17 @@ public class CategorySyncService {
         return syncCommandService.execute(
             currentUser.getId(), commandId, "DELETE_CATEGORY", request,
             HttpStatus.OK.value(), () -> {
-                Category category = findOwnedAtVersion(
-                    request.syncId(), request.expectedVersion(), currentUser
-                );
+                Category category = categoryRepository.findOwnedBySyncId(request.syncId(), currentUser)
+                    .orElse(null);
+                if (category == null) {
+                    if (tombstones.categoryWasDeleted(currentUser.getId(), request.syncId())) {
+                        return new SyncDeleteResponse(request.syncId(), true);
+                    }
+                    throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Category is unavailable for synchronization"
+                    );
+                }
+                validateTarget(category, request.expectedVersion());
                 categoryService.deleteCategory(category.getCategory_id(), currentUser);
                 categoryRepository.flush();
                 return new SyncDeleteResponse(request.syncId(), true);
@@ -135,17 +150,23 @@ public class CategorySyncService {
     }
 
     private Category findOwnedAtVersion(UUID syncId, Long expectedVersion, User currentUser) {
-        Category category = categoryRepository.findOwnedBySyncId(syncId, currentUser)
-            .orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND, "Category is unavailable for synchronization"
-            ));
+        var existing = categoryRepository.findOwnedBySyncId(syncId, currentUser);
+        if (existing.isEmpty()) {
+            var restored = dependencies.restoreEditedDependency(currentUser.getId(), "CATEGORY", syncId, expectedVersion);
+            return categoryRepository.findById(restored.id()).orElseThrow();
+        }
+        Category category = existing.get();
+        validateTarget(category, expectedVersion);
+        return category;
+    }
+
+    private void validateTarget(Category category, Long expectedVersion) {
         if (!expectedVersion.equals(category.getVersion())) {
             throw new ResponseStatusException(
                 HttpStatus.CONFLICT,
                 "Category version conflict. Synchronize before retrying."
             );
         }
-        return category;
     }
 
     private CategoryResponse response(Category category) {

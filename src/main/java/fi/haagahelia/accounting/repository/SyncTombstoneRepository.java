@@ -18,16 +18,7 @@ public class SyncTombstoneRepository {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void recordEntryDeletion(Long userId, UUID syncId) {
-        jdbcTemplate.update(
-            """
-            INSERT INTO sync_tombstone (
-                user_id, entity_type, sync_id
-            )
-            VALUES (?, 'ENTRY', ?)
-            """,
-            userId,
-            syncId
-        );
+        recordRestorableDeletion(userId, "ENTRY", syncId);
     }
 
     public boolean entryWasDeleted(Long userId, UUID syncId) {
@@ -108,16 +99,7 @@ public class SyncTombstoneRepository {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void recordTransferDeletion(Long userId, UUID syncId) {
-        jdbcTemplate.update(
-            """
-            INSERT INTO sync_tombstone (
-                user_id, entity_type, sync_id
-            )
-            VALUES (?, 'TRANSFER', ?)
-            """,
-            userId,
-            syncId
-        );
+        recordRestorableDeletion(userId, "TRANSFER", syncId);
     }
 
     public boolean transferWasDeleted(Long userId, UUID syncId) {

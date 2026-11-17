@@ -740,6 +740,27 @@ class PostgresAccountSyncIntegrationTest {
     }
 
     @Test
+    void offlineRenameRestoresDeletedAccountWithOriginalBalanceAndSyncId() throws Exception {
+        Account account = accountRepository.saveAndFlush(
+            new Account("Cash", new BigDecimal("125.50"), "", owner)
+        );
+        UUID id = account.getSyncId();
+        long version = account.getVersion();
+        accountService.deleteAccount(account.getAccount_id(), owner);
+        accountRepository.flush();
+
+        mockMvc.perform(put("/api/sync/accounts/{commandId}", UUID.randomUUID())
+                .with(user(owner.getUsername())).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"syncId":"%s","expectedVersion":%d,"name":"Local rename"}
+                    """.formatted(id, version)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.syncId").value(id.toString()))
+            .andExpect(jsonPath("$.name").value("Local rename"))
+            .andExpect(jsonPath("$.amount").value(125.50));
+    }
+
+    @Test
     void deletesAccountOnceAndReturnsOriginalResponseOnRetry()
             throws Exception {
 
@@ -785,6 +806,12 @@ class PostgresAccountSyncIntegrationTest {
             )
             .andExpect(status().isOk())
             .andExpect(content().string(firstResponse));
+
+        mockMvc.perform(post("/api/sync/accounts/{commandId}/delete", UUID.randomUUID())
+                .with(user(owner.getUsername())).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(requestBody))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.deleted").value(true));
+
 
         assertEquals(
             0L,

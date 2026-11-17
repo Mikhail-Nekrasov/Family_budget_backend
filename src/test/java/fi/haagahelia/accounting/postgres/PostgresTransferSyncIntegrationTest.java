@@ -89,6 +89,34 @@ class PostgresTransferSyncIntegrationTest {
     }
 
     @Test
+    void restoresEditedTransferWithOriginalSyncIdAndAppliesBalancesOnce() throws Exception {
+        User owner = saveUser("restore_deleted_transfer_owner");
+        Account cash = saveAccount(owner, "Cash", "EUR", "100.00");
+        Account yen = saveAccount(owner, "Yen", "JPY", "5000");
+        UUID syncId = UUID.randomUUID();
+        send(owner, post("/api/sync/transfers/{commandId}", UUID.randomUUID()),
+            transferBody(syncId, cash, yen, "20.25", "3000", null))
+            .andExpect(status().isCreated());
+        send(owner, post("/api/sync/transfers/{commandId}/delete", UUID.randomUUID()),
+            """
+            {"syncId":"%s","expectedVersion":0}
+            """.formatted(syncId)).andExpect(status().isOk());
+        assertBalance(cash, "100.00");
+        assertBalance(yen, "5000");
+
+        UUID editCommand = UUID.randomUUID();
+        String edit = transferBody(syncId, cash, yen, "21.50", "3100", 0L);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            send(owner, put("/api/sync/transfers/{commandId}", editCommand), edit)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.syncId").value(syncId.toString()))
+                .andExpect(jsonPath("$.version").value(1));
+        }
+        assertBalance(cash, "78.50");
+        assertBalance(yen, "8100");
+    }
+
+    @Test
     void repeatedTransferMovesMoneyOnceAndPreservesClientDate()
             throws Exception {
 
@@ -249,6 +277,8 @@ class PostgresTransferSyncIntegrationTest {
             .andReturn().getResponse().getContentAsString();
         send(owner, post("/api/sync/transfers/{commandId}/delete", deleteCommand), delete)
             .andExpect(status().isOk()).andExpect(content().string(deleted));
+        send(owner, post("/api/sync/transfers/{commandId}/delete", UUID.randomUUID()), delete)
+            .andExpect(status().isOk()).andExpect(jsonPath("$.deleted").value(true));
         send(owner, post("/api/sync/transfers/{commandId}", UUID.randomUUID()),
             transferBody(transfer, cash, yen, "20.25", "3000", null))
             .andExpect(status().isConflict());

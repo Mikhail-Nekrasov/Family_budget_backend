@@ -174,19 +174,20 @@ public class EntrySyncService {
             normalized,
             HttpStatus.OK.value(),
             () -> {
-                var existing = entryRepository.findOwnedBySyncId(
-                    syncId, currentUser
-                ).orElseThrow(() -> {
-                    if (tombstones.entryWasDeleted(currentUser.getId(), syncId)) {
-                        return new ResponseStatusException(HttpStatus.GONE, "Entry was deleted on the server");
+                var existing = entryRepository.findOwnedBySyncId(syncId, currentUser).orElse(null);
+                Long restoreVersion = null;
+                if (existing == null) {
+                    if (!tombstones.entryWasDeleted(currentUser.getId(), syncId)) {
+                        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Entry is unavailable for synchronization");
                     }
-                    return new ResponseStatusException(HttpStatus.NOT_FOUND, "Entry is unavailable for synchronization");
-                });
-
-                personalSyncPolicy.requirePrivateAccount(existing.getAccount());
-
-                if (!expectedVersion.equals(existing.getVersion())) {
-                    throw new EntryVersionConflictException(existing);
+                    restoreVersion = dependencies.nextRestoreVersion(
+                        currentUser.getId(), "ENTRY", syncId, expectedVersion, normalized.type()
+                    );
+                } else {
+                    personalSyncPolicy.requirePrivateAccount(existing.getAccount());
+                    if (!expectedVersion.equals(existing.getVersion())) {
+                        throw new EntryVersionConflictException(existing);
+                    }
                 }
 
                 var account = accountRepository.findOwnedBySyncId(
@@ -202,6 +203,18 @@ public class EntrySyncService {
                 ).orElseThrow(() -> dependencies.unavailable(
                     currentUser.getId(), "CATEGORY", categorySyncId, "Category is unavailable for synchronization"
                 ));
+
+                if (restoreVersion != null) {
+                    var accounts = new AccountVersionChanges(account);
+                    var response = entryService.createEntryFromRequest(new CreateEntryRequest(
+                        normalized.title(), normalized.type(), normalized.amount(), normalized.dateTime(),
+                        normalized.description(), account.getAccount_id(), category.getCategory_id(), syncId
+                    ), currentUser, restoreVersion);
+                    entryRepository.flush();
+                    dependencies.finishFinancialRestore(currentUser.getId(), "ENTRY", syncId, restoreVersion,
+                        entryRepository.getReferenceById(response.id()));
+                    return syncCommandService.withAccountVersionChanges(response, accounts);
+                }
 
                 UpdateEntryRequest updateRequest = new UpdateEntryRequest(
                     normalized.title(),
@@ -254,10 +267,15 @@ public class EntrySyncService {
             () -> {
                 var existing = entryRepository.findOwnedBySyncId(
                     syncId, currentUser
-                ).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Entry is unavailable for synchronization"
-                ));
+                ).orElse(null);
+                if (existing == null) {
+                    if (tombstones.entryWasDeleted(currentUser.getId(), syncId)) {
+                        return new SyncDeleteResponse(syncId, true);
+                    }
+                    throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Entry is unavailable for synchronization"
+                    );
+                }
 
                 personalSyncPolicy.requirePrivateAccount(existing.getAccount());
 

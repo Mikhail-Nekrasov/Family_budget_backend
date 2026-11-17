@@ -126,6 +126,10 @@ public class EntryService {
 
     @Transactional
     public void createEntry(Entry entry, User currentUser) {
+        createEntry(entry, currentUser, false);
+    }
+
+    private void createEntry(Entry entry, User currentUser, boolean restoring) {
         if (entry.getId() != null) {
         throw new ResponseStatusException(
             HttpStatus.BAD_REQUEST,
@@ -134,7 +138,7 @@ public class EntryService {
     }    
         validateEntryReferences(entry, currentUser, null);
 
-        if (syncTombstoneRepository.entryWasDeleted(
+        if (!restoring && syncTombstoneRepository.entryWasDeleted(
                 entry.getAccount().getUser().getId(),
                 entry.getSyncId())) {
             throw new ResponseStatusException(
@@ -272,11 +276,11 @@ public class EntryService {
         account.setAmount(balance);
         accountRepository.save(account);
 
-        entryRepository.delete(entry);
         syncTombstoneRepository.recordEntryDeletion(
             account.getUser().getId(),
             entry.getSyncId()
         );
+        entryRepository.delete(entry);
     }
 
     @Transactional(readOnly = true)
@@ -327,6 +331,10 @@ public class EntryService {
     public EntryResponse createEntryFromRequest(
             CreateEntryRequest request, User currentUser) {
 
+        return createEntryFromRequest(request, currentUser, null);
+    }
+
+    EntryResponse createEntryFromRequest(CreateEntryRequest request, User currentUser, Long restoredVersion) {
         if (request.accountId() == null || request.categoryId() == null) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
@@ -361,7 +369,7 @@ public class EntryService {
             entry.assignSyncId(request.syncId());
         }
 
-        createEntry(entry, currentUser);
+        createEntry(entry, currentUser, restoredVersion != null);
 
         return new EntryResponse(
             entry.getId(),
@@ -375,7 +383,7 @@ public class EntryService {
             entry.getCategory().getCategory_id(),
             entry.getCategory().getName(),
             entry.getSyncId(),
-            entry.getVersion()
+            restoredVersion == null ? entry.getVersion() : restoredVersion
         );
     }
 
